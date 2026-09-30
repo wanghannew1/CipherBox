@@ -1,0 +1,19 @@
+# opencode agent state (session/plans/drafts) — not project source
+.omo/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Probe / tool output artifacts
+*.enc
+*.fat32
+probe-*.docx
+probe-*.xlsx
+
+# OS
+.DS_Store
+Thumbs.db
