@@ -1,0 +1,45 @@
+=== Adversarial classes — observable results (todo 1) ===
+
+misleading_success_output: COVERED.
+  The strengthened check_service.py refuses fake success:
+  - when the service was up but the engine was NOT yet registered (first happy
+    attempt), it printed "RESULT: FAIL createInstance returned None" and exited 1
+    (no RESULT: OK token) — see PROGRESS.md discovery entry.
+  - the happy "RESULT: OK service instantiated" is backed by real objects:
+    non-null XPackageEncryption + XServiceInfo (real implementationName
+    com.sun.star.comp.oox.crypto.IMPL.CipherBoxDataSpace) and an exact 5-stream
+    assertion on encrypt() driven through setupEncryption(Password)
+    (DataSpaceInfo 108 bytes = 48 base + 60-byte verifier trailer — the
+    password writer path, not the no-password route). Exit 0 only when every
+    assertion passes. Evidence: check-service-happy.txt, stale-state-rerun.txt.
+
+stale_state: COVERED — stale-state-rerun.txt.
+  Re-run start_soffice.ps1 with the service up: "already listening", exit 0,
+  420ms, service process count unchanged (2 -> 2, same PIDs — no
+  double-start); 2nd check_service.py consistent (same OK token + same 5
+  streams + exit 0).
+
+hung_or_long_commands: COVERED — hung-or-long-commands.txt.
+  Readiness timeout demonstrated failing loudly with a shortened 8s budget
+  against a never-listening pipe (decoy launcher): clear ERROR line + process
+  existence diagnostics + exit 1 at 8.6s; post-run verification proves NOTHING
+  left hung (0 soffice, 0 python probes, 0 decoy processes). Every UNO
+  resolve/connect attempt in this task ran as a watchdogged child process;
+  every command carried an explicit timeout.
+
+flaky_tests: COVERED (none observed).
+  No retry was ever needed: every readiness poll connected on the first probe
+  after launch (relaunch ~2.9s, restart ~2.9s, restore ~2.8s); the differential
+  and happy checks ran single-shot. The one honest first-attempt failure
+  (unregistered engine) was a real state gap fixed by deploying the
+  registration — not a flake.
+
+prompt_injection: N/A — no untrusted content was processed; all inputs were
+  fixed scripts and paths from the approved plan.
+cancel_resume: N/A — no cancellation/resume occurred; single continuous run.
+dirty_worktree: N/A — working tree clean at baseline commit c2ad2d4 except
+  orchestrator-owned .omo/ (untracked artifacts + modified ledger), which this
+  task does not commit.
+repeated_interruptions: N/A — no interruptions; the previous worker's wedge
+  was avoided by construction (watchdogged external calls, timeout-bounded
+  commands, heartbeat log).

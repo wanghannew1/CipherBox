@@ -1,0 +1,11 @@
+﻿=== start_soffice.ps1 relaunch with registration (90s watchdog, elapsed 2888ms) ===
+EXITCODE: 0
+--- STDOUT ---
+engine deployment unchanged: S:\.cipherbox-profile\service\user\Scripts\python\cipherbox.py
+registration written: S:\.cipherbox-profile\service\user\extensions\shared\cipherbox\components.rdb
+registration written: S:\.cipherbox-profile\service\user\extensions\shared\registry\com.sun.star.comp.deployment.component.PackageRegistryBackend\unorc
+service launched: launcher PID 18116, profile file:///S:/.cipherbox-profile/service, pipe cipherbox-service, TMP=TEMP=S:\.cipherbox-tmp\service
+service ready: uno:pipe,name=cipherbox-service;urp;StarOffice.ComponentContext resolves
+
+--- STDERR ---
+

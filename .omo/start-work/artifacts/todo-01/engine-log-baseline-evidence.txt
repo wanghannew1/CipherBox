@@ -1,0 +1,250 @@
+[CipherBoxDataSpace] getComponentFactory('com.cipherbox.CipherBoxDataSpace')
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] setupEncryption(names=[CryptoType, Password])
+[CipherBoxDataSpace] key derived from Password (***len=28 fp=c4bbcb1f***); verifier stored
+[CipherBoxDataSpace] encrypt(): plaintext 4970 bytes, key=AES/256bits
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] encrypt(): returning 5 streams, EncryptedPackage 5000 bytes
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/Version, EncryptedPackage, DataSpaces/DataSpaceMap, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] createEncryptionData(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] decrypt(): cipherText 4976 -> plaintext 4970 bytes (declared 4970), key=AES/256bits
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=True
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/Version, EncryptedPackage, DataSpaces/DataSpaceMap, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=23 fp=85c0a4c4***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] setupEncryption(names=[CryptoType, Password])
+[CipherBoxDataSpace] key derived from Password (***len=28 fp=c4bbcb1f***); verifier stored
+[CipherBoxDataSpace] encrypt(): plaintext 5521 bytes, key=AES/256bits
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] encrypt(): returning 5 streams, EncryptedPackage 5560 bytes
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/Version, EncryptedPackage, DataSpaces/DataSpaceMap, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] createEncryptionData(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] decrypt(): cipherText 5536 -> plaintext 5521 bytes (declared 5521), key=AES/256bits
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=True
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] setupEncryption(names=[CryptoType, Password])
+[CipherBoxDataSpace] key derived from Password (***len=28 fp=c4bbcb1f***); verifier stored
+[CipherBoxDataSpace] encrypt(): plaintext 8221 bytes, key=AES/256bits
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] encrypt(): returning 5 streams, EncryptedPackage 8248 bytes
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/Version, EncryptedPackage, DataSpaces/DataSpaceMap, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] createEncryptionData(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] decrypt(): cipherText 8224 -> plaintext 8221 bytes (declared 8221), key=AES/256bits
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=True
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/Version, EncryptedPackage, DataSpaces/DataSpaceMap, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=23 fp=85c0a4c4***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] createInstance()
+[CipherBoxDataSpace] createEncryptionData(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] encrypt(): plaintext 5031 bytes, key=AES/256bits
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] encrypt(): returning 5 streams, EncryptedPackage 5064 bytes
+[CipherBoxDataSpace] setupEncryption(names=[CryptoType, CipherBoxKey])
+[CipherBoxDataSpace] key recovered from media encryption data (32 bytes)
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] decrypt(): cipherText 5040 -> plaintext 5031 bytes (declared 5031), key=AES/256bits
+[CipherBoxDataSpace] createInstance()
+[CipherBoxDataSpace] setupEncryption(names=[CryptoType, Password])
+[CipherBoxDataSpace] key derived from Password (***len=28 fp=c4bbcb1f***); verifier stored
+[CipherBoxDataSpace] encrypt(): plaintext 2032 bytes, key=AES/256bits
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] encrypt(): returning 5 streams, EncryptedPackage 2072 bytes
+[CipherBoxDataSpace] createInstance()
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/DataSpaceMap, DataSpaces/Version, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary, EncryptedPackage])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=False
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=(empty))
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=29 fp=9565794e***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=28 fp=c1a4865a***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=False
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=True
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] decrypt(): cipherText 2048 -> plaintext 2032 bytes (declared 2032), key=AES/256bits
+[CipherBoxDataSpace] createInstance()
+[CipherBoxDataSpace] setupEncryption(names=[CryptoType, CipherBoxKey])
+[CipherBoxDataSpace] key recovered from media encryption data (32 bytes)
+[CipherBoxDataSpace] encrypt(): plaintext 6 bytes, key=AES/256bits
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] encrypt(): returning 5 streams, EncryptedPackage 40 bytes
+[CipherBoxDataSpace] createInstance()
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/DataSpaceMap, DataSpaces/Version, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary, EncryptedPackage])
+[CipherBoxDataSpace] readEncryptionInfo(): no verifier in file (accept any password)
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=8 fp=85738f8f***)
+[CipherBoxDataSpace] getComponentFactory('com.cipherbox.CipherBoxDataSpace')
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] setupEncryption(names=[CryptoType, Password])
+[CipherBoxDataSpace] key derived from Password (***len=28 fp=c4bbcb1f***); verifier stored
+[CipherBoxDataSpace] encrypt(): plaintext 4969 bytes, key=AES/256bits
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] encrypt(): returning 5 streams, EncryptedPackage 5000 bytes
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/Version, EncryptedPackage, DataSpaces/DataSpaceMap, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] createEncryptionData(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] decrypt(): cipherText 4976 -> plaintext 4969 bytes (declared 4969), key=AES/256bits
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=True
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/Version, EncryptedPackage, DataSpaces/DataSpaceMap, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=23 fp=85c0a4c4***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] setupEncryption(names=[CryptoType, Password])
+[CipherBoxDataSpace] key derived from Password (***len=28 fp=c4bbcb1f***); verifier stored
+[CipherBoxDataSpace] encrypt(): plaintext 5520 bytes, key=AES/256bits
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] encrypt(): returning 5 streams, EncryptedPackage 5560 bytes
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/Version, EncryptedPackage, DataSpaces/DataSpaceMap, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] createEncryptionData(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] decrypt(): cipherText 5536 -> plaintext 5520 bytes (declared 5520), key=AES/256bits
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=True
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] setupEncryption(names=[CryptoType, Password])
+[CipherBoxDataSpace] key derived from Password (***len=28 fp=c4bbcb1f***); verifier stored
+[CipherBoxDataSpace] encrypt(): plaintext 8222 bytes, key=AES/256bits
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] encrypt(): returning 5 streams, EncryptedPackage 8248 bytes
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/Version, EncryptedPackage, DataSpaces/DataSpaceMap, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] createEncryptionData(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] decrypt(): cipherText 8224 -> plaintext 8222 bytes (declared 8222), key=AES/256bits
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=True
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/Version, EncryptedPackage, DataSpaces/DataSpaceMap, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=23 fp=85c0a4c4***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/Version, EncryptedPackage, DataSpaces/DataSpaceMap, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] createEncryptionData(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] decrypt(): cipherText 4976 -> plaintext 4969 bytes (declared 4969), key=AES/256bits
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=True
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/Version, EncryptedPackage, DataSpaces/DataSpaceMap, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] createEncryptionData(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] decrypt(): cipherText 4976 -> plaintext 4969 bytes (declared 4969), key=AES/256bits
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=True
+[CipherBoxDataSpace] createInstance()
+[CipherBoxDataSpace] createEncryptionData(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] encrypt(): plaintext 5031 bytes, key=AES/256bits
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] encrypt(): returning 5 streams, EncryptedPackage 5064 bytes
+[CipherBoxDataSpace] setupEncryption(names=[CryptoType, CipherBoxKey])
+[CipherBoxDataSpace] key recovered from media encryption data (32 bytes)
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] decrypt(): cipherText 5040 -> plaintext 5031 bytes (declared 5031), key=AES/256bits
+[CipherBoxDataSpace] createInstance()
+[CipherBoxDataSpace] setupEncryption(names=[CryptoType, Password])
+[CipherBoxDataSpace] key derived from Password (***len=28 fp=c4bbcb1f***); verifier stored
+[CipherBoxDataSpace] encrypt(): plaintext 2032 bytes, key=AES/256bits
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] encrypt(): returning 5 streams, EncryptedPackage 2072 bytes
+[CipherBoxDataSpace] createInstance()
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/DataSpaceMap, DataSpaces/Version, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary, EncryptedPackage])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=False
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=(empty))
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=29 fp=9565794e***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=28 fp=c1a4865a***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=False
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=True
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] decrypt(): cipherText 2048 -> plaintext 2032 bytes (declared 2032), key=AES/256bits
+[CipherBoxDataSpace] createInstance()
+[CipherBoxDataSpace] setupEncryption(names=[CryptoType, CipherBoxKey])
+[CipherBoxDataSpace] key recovered from media encryption data (32 bytes)
+[CipherBoxDataSpace] encrypt(): plaintext 6 bytes, key=AES/256bits
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] encrypt(): returning 5 streams, EncryptedPackage 40 bytes
+[CipherBoxDataSpace] createInstance()
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/DataSpaceMap, DataSpaces/Version, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary, EncryptedPackage])
+[CipherBoxDataSpace] readEncryptionInfo(): no verifier in file (accept any password)
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=8 fp=85738f8f***)
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/Version, EncryptedPackage, DataSpaces/DataSpaceMap, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] createEncryptionData(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] decrypt(): cipherText 4976 -> plaintext 4969 bytes (declared 4969), key=AES/256bits
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=True
+[CipherBoxDataSpace] createInstanceWithArguments(0 args)
+[CipherBoxDataSpace] readEncryptionInfo(names=[DataSpaces/Version, EncryptedPackage, DataSpaces/DataSpaceMap, DataSpaces/DataSpaceInfo/CipherBoxDataSpace, DataSpaces/TransformInfo/CipherBoxTransform/Primary])
+[CipherBoxDataSpace] readEncryptionInfo(): verifier recovered from DataSpaceInfo
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=15 fp=f57b5812***)
+[CipherBoxDataSpace] generateEncryptionKey(): verifier mismatch -> rejecting password
+[CipherBoxDataSpace] generateEncryptionKey(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] createEncryptionData(password=***len=28 fp=c4bbcb1f***)
+[CipherBoxDataSpace] key object buffer = 1024 bytes
+[CipherBoxDataSpace] decrypt(): cipherText 4976 -> plaintext 4969 bytes (declared 4969), key=AES/256bits
+[CipherBoxDataSpace] checkDataIntegrity() key_verified=True

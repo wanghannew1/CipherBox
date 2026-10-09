@@ -1,0 +1,32 @@
+﻿=== stale_state: re-run start_soffice.ps1 with service up ===
+service processes BEFORE re-run: 2 (24036, 23264)
+
+start_soffice.ps1 re-run (420ms): EXITCODE: 0
+engine deployment unchanged: S:\.cipherbox-profile\service\user\Scripts\python\cipherbox.py
+registration unchanged: S:\.cipherbox-profile\service\user\extensions\shared\cipherbox\components.rdb
+registration unchanged: S:\.cipherbox-profile\service\user\extensions\shared\registry\com.sun.star.comp.deployment.component.PackageRegistryBackend\unorc
+already listening: uno:pipe,name=cipherbox-service;urp;StarOffice.ComponentContext resolves (probe ok)
+
+
+
+service processes AFTER re-run: 2 (24036, 23264)
+no double-start (count unchanged): True
+
+=== 2nd check_service.py (consistency, 303ms) ===
+EXITCODE: 0
+connected; service manager = pyuno object (com.sun.star.lang.XMultiComponentFactory)0x1ed21aea2c8{implementationName=com.sun.star.comp.cppuhelper.bootstrap.ServiceManager, supportedServices={com.sun.star.lang.MultiServiceFactory,com.sun.star.lang.ServiceManager}, supportedInterfaces={com.sun.star.uno.XWeak,com.sun.star.lang.XComponent,com.sun.star.lang.XTypeProvider,com.sun.star.lang.XServiceInfo,com.sun.star.lang.XMultiServiceFactory,com.sun.star.lang.XMultiComponentFactory,com.sun.star.container.XSet,com.sun.star.container.XContentEnumerationAccess,com.sun.star.beans.XPropertySet,com.sun.star.beans.XPropertySetInfo,com.sun.star.lang.XEventListener,com.sun.star.lang.XInitialization}}
+RESULT: OK service instantiated -> pyuno object (com.sun.star.uno.XInterface)0x1ed21aeaa88{implementationName=com.sun.star.comp.oox.crypto.IMPL.CipherBoxDataSpace, supportedServices={com.sun.star.comp.oox.crypto.CipherBoxDataSpace}, supportedInterfaces={com.sun.star.packages.XPackageEncryption,com.sun.star.lang.XInitialization,com.sun.star.lang.XServiceInfo,com.sun.star.lang.XTypeProvider}}
+  XPackageEncryption  : yes
+  implementationName  : com.sun.star.comp.oox.crypto.IMPL.CipherBoxDataSpace
+  supportedServices   : ['com.sun.star.comp.oox.crypto.CipherBoxDataSpace']
+  encrypt() streams   : ['\x06DataSpaces/DataSpaceMap', '\x06DataSpaces/Version', '\x06DataSpaces/DataSpaceInfo/CipherBoxDataSpace', '\x06DataSpaces/TransformInfo/CipherBoxTransform/\x06Primary', 'EncryptedPackage']
+      DataSpaces/DataSpaceMap                             96 bytes
+      DataSpaces/Version                                  76 bytes
+      DataSpaces/DataSpaceInfo/CipherBoxDataSpace         108 bytes
+      DataSpaces/TransformInfo/CipherBoxTransform/Primary 184 bytes
+      EncryptedPackage                                     56 bytes
+RESULT: OK encrypt() returned the 5 expected container streams
+
+
+
+2nd check consistent (OK token + 5 streams + exit 0): True

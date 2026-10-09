@@ -75,7 +75,7 @@
 
 ### Wave 0 — Spike：方案 B 可行性验证（真风险闸门）
 
-- [ ] 1. 确认常驻 soffice 可启动并注册 CipherBoxDataSpace 服务（服务专用 profile 落卷内）
+- [x] 1. 确认常驻 soffice 可启动并注册 CipherBoxDataSpace 服务（服务专用 profile 落卷内）
   - References: `lo-encryption-demo/test/check_service.py`、`test/test_e2e.py`（URL `uno:socket,host=127.0.0.1,port=2002`）；`lo-encryption-demo/src/cipherbox.py`（服务名 `com.sun.star.comp.oox.crypto.CipherBoxDataSpace`）。
   - Acceptance: 创建 `start_soffice.ps1`，启动命令为 `soffice --headless -env:UserInstallation=<服务专用profile, 落 S:\.cipherbox-profile\service\> --accept="pipe,name=cipherbox-service;urp;"`（**UNO 走命名管道而非 TCP socket——loopback TCP 跨用户无认证，命名管道受 NT DACL 限定当前用户**；服务专用 profile 落卷内且规避与员工正常 LO 实例的单实例转交冲突；**并设 `TMP=TEMP=S:\.cipherbox-tmp\service\` 卷内临时目录**），运行后 `check_service.py` 输出 `RESULT: OK service instantiated`（**同步把 `check_service.py`、`test_documents.py`、`test_e2e.py` 三处连接 URL 迁移到 `uno:pipe,name=cipherbox-service;urp;StarOffice.ComponentContext`——否则它们按 socket 连接必然 `could not connect`（todo 2 spike 与 todo 25 E2E 均沿用 `test_documents.py` 驱动，不迁移则必失败）**）。启动顺序：先挂卷再起服务。
   - QA happy: 运行 `check_service.py` → 断言 `XPackageEncryption` 与 `XServiceInfo` 均非空、`encrypt()` 返回 5 个命名流（DataSpaceMap/Version/DataSpaceInfo/TransformInfo/EncryptedPackage；**`check_service.py` 需传一个测试口令——todo 10 ③ 加 fail-closed 门禁后无口令调 `encrypt()` 会抛错**）。

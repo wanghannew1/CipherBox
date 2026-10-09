@@ -1,0 +1,59 @@
+﻿
+--- docx (MS Word 2007 XML) custom XPackageEncryption ---
+PASS  docx: file written 
+PASS  docx: is an OLE/CFB container 9728 bytes, magic=d0cf11e0a1b11ae1
+PASS  docx: EncryptedPackage present 
+PASS  docx: our encrypt() ran component log 8556 -> 9051 bytes
+PASS  docx: key derived from password 
+PASS  docx: container names CipherBoxDataSpace 
+PASS  docx: reloads with correct password 
+PASS  docx: our decrypt() ran on reload 
+FAIL  docx: content survives round trip 'ÐÏ#à¡±#á################;###þÿ\t###################'
+ERROR docx: Unsupported URL <file:///C:/Users/22419/AppData/Local/Temp/cipherbox-docs/sample.docx>: "type detection aborted"
+
+--- xlsx (Calc MS Excel 2007 XML) custom XPackageEncryption ---
+PASS  xlsx: file written 
+PASS  xlsx: is an OLE/CFB container 10240 bytes, magic=d0cf11e0a1b11ae1
+PASS  xlsx: EncryptedPackage present 
+PASS  xlsx: our encrypt() ran component log 10619 -> 11037 bytes
+PASS  xlsx: key derived from password 
+PASS  xlsx: container names CipherBoxDataSpace 
+PASS  xlsx: reloads with correct password 
+PASS  xlsx: our decrypt() ran on reload 
+ERROR xlsx: AttributeError('Sheets')
+
+--- pptx (Impress MS PowerPoint 2007 XML) custom XPackageEncryption ---
+PASS  pptx: file written 
+PASS  pptx: is an OLE/CFB container 13312 bytes, magic=d0cf11e0a1b11ae1
+PASS  pptx: EncryptedPackage present 
+PASS  pptx: our encrypt() ran component log 11925 -> 12343 bytes
+PASS  pptx: key derived from password 
+PASS  pptx: container names CipherBoxDataSpace 
+PASS  pptx: reloads with correct password 
+PASS  pptx: our decrypt() ran on reload 
+FAIL  pptx: content survives round trip ''
+ERROR pptx: Unsupported URL <file:///C:/Users/22419/AppData/Local/Temp/cipherbox-docs/sample.pptx>: "type detection aborted"
+
+--- doc (MS Word 97) built-in crypto ---
+PASS  doc: file written 
+PASS  doc: is an OLE/CFB container 9216 bytes, magic=d0cf11e0a1b11ae1
+FAIL  doc: EncryptedPackage present 
+SKIP  doc: built-in encryption, CipherBox hook not applicable
+FAIL  doc: reloads with correct password 
+
+--- xls (MS Excel 97) built-in crypto ---
+PASS  xls: file written 
+PASS  xls: is an OLE/CFB container 5632 bytes, magic=d0cf11e0a1b11ae1
+FAIL  xls: EncryptedPackage present 
+SKIP  xls: built-in encryption, CipherBox hook not applicable
+FAIL  xls: reloads with correct password 
+
+--- ppt (MS PowerPoint 97) built-in crypto ---
+PASS  ppt: file written 
+PASS  ppt: is an OLE/CFB container 459264 bytes, magic=d0cf11e0a1b11ae1
+FAIL  ppt: EncryptedPackage present 
+SKIP  ppt: built-in encryption, CipherBox hook not applicable
+PASS  ppt: reloads with correct password 
+FAIL  ppt: content survives round trip ''
+
+RESULT: FAIL (11) -> docx: content survives round trip, docx raised, xlsx raised, pptx: content survives round trip, pptx raised, doc: EncryptedPackage present, doc: reloads with correct password, xls: EncryptedPackage present, xls: reloads with correct password, ppt: EncryptedPackage present, ppt: content survives round trip

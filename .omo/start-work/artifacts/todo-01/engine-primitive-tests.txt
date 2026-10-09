@@ -1,0 +1,75 @@
+﻿===== LibreOffice version =====
+26.8.0.3
+===== test_e2e.py (engine primitives, socket, fresh instance) =====
+connected
+
+PASS  service instantiated 
+       pyuno object (com.sun.star.uno.XInterface)0x12ce7fc7f08{implementationName=com.sun.star.comp.oox.crypto.IMPL.CipherBoxDataSpace, supportedServices={com.sun.star.comp.oox.crypto.CipherBoxDataSpace}, supportedInterfaces={com.sun.star.packages.XPackageEncryption,com.sun.star.lang.XInitialization,com.sun.star.lang.XServiceInfo,com.sun.star.lang.XTypeProvider}}
+
+PASS  supports XPackageEncryption 
+PASS  supports XServiceInfo 
+PASS    implementationName com.sun.star.comp.oox.crypto.IMPL.CipherBoxDataSpace
+PASS    supportedServices ['com.sun.star.comp.oox.crypto.CipherBoxDataSpace']
+PASS  CryptoType round-trips through NamedValue 'CipherBoxDataSpace'
+PASS  key is 32 bytes 32
+
+PASS  encrypt() returns a sequence 5 streams
+PASS  stream names match MS-OFFCRYPTO ['\x06DataSpaces/DataSpaceMap', '\x06DataSpaces/Version', '\x06DataSpaces/DataSpaceInfo/CipherBoxDataSpace', '\x06DataSpaces/TransformInfo/CipherBoxTransform/\x06Primary', 'EncryptedPackage']
+       DataSpaces/DataSpaceMap                                96 bytes
+       DataSpaces/Version                                     76 bytes
+       DataSpaces/DataSpaceInfo/CipherBoxDataSpace            48 bytes
+       DataSpaces/TransformInfo/CipherBoxTransform/Primary   184 bytes
+       EncryptedPackage                                      5064 bytes
+
+PASS  DataSpaceMap size 96
+PASS  DataSpaceMap entry length 0x60 
+PASS  Version size 76
+PASS  DataSpaceInfo size 48
+PASS  TransformInfo size 184
+PASS  TransformLength field 
+PASS  EncryptedPackage declares plaintext length 5031 vs 5031
+PASS  EncryptedPackage IV present 
+PASS  ciphertext is block aligned 5040
+PASS  ciphertext differs from plaintext 
+
+PASS  decrypt() returns true (True, pyuno object (com.sun.star.io.XOutputStream)0x12ce7fc
+PASS  decrypt() yields an output stream pyuno object (com.sun.star.io.XOutputStream)0x12ce7fc7e88{im
+PASS  round-trip plaintext is byte-identical 5031 bytes
+
+RESULT: PASS (full encrypt/decrypt round trip)
+E2E_EXIT=0
+
+===== test_password_verify.py (verifier, socket, fresh instance) =====
+PASS  deployed component exists C:\Users\22419\AppData\Roaming\LibreOffice\4\user\Scripts\python\cipherbox.py
+PASS  deployed component matches src 
+connected
+
+PASS  writer instantiated 
+PASS  encrypt() returns 5 streams 5
+PASS  DataSpaceInfo carries the verifier trailer 108 bytes (expected 108)
+PASS  DataSpaceInfo base is untouched 
+PASS  verifier parses back out of the stream 
+PASS  verifier salt length 16
+PASS  verifier hash length 32
+PASS  verifier matches the password used on save 
+PASS  verifier rejects the LibreOffice default probe 
+
+PASS  reader instantiated 
+PASS  readEncryptionInfo() succeeds 
+PASS  checkDataIntegrity() is false before a key is verified 
+PASS  generateEncryptionKey() REJECTS 'VelvetSweatshop' 
+PASS  generateEncryptionKey() rejects an empty password 
+PASS  generateEncryptionKey() rejects a near-miss password 
+PASS  generateEncryptionKey() rejects a case-changed password 
+PASS  checkDataIntegrity() still false after wrong passwords 
+PASS  generateEncryptionKey() ACCEPTS the real password 
+PASS  checkDataIntegrity() true after the correct password 
+
+PASS  decrypt() succeeds with the verified key (True, pyuno object (com.sun.star.io.XOutputStream
+
+PASS  no-verifier file has a plain DataSpaceInfo 48 bytes
+PASS  no-verifier file parses to no verifier 
+PASS  no-verifier file still accepts any password (back-compat) 
+
+RESULT: PASS (password verification rejects wrong passwords)
+PW_EXIT=0

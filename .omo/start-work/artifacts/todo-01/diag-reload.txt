@@ -1,0 +1,9 @@
+﻿===== diag_reload.py (diagnostic pinpoint, socket, fresh instance) =====
+probes: 1) TypeDetection.queryTypeByDescriptor(correct password)  2) loadComponentFromURL(explicit FilterName=MS Word 2007 XML + Password)  3) loadComponentFromURL(Password only, as test_documents.py does)
+
+1. queryTypeByDescriptor -> ('', ((com.sun.star.beans.PropertyValue){ Name = (string)"Url", Handle = (long)0x0, Value = (any){ (string)"file:///C:/Users/22419/AppData/Local/Temp/cipherbox-docs/sample.docx" }, State = (com.sun.star.beans.PropertyState)DIRECT_VALUE }, (com.sun.star.beans.PropertyValue){ Name = (string)"Password", Handle = (long)0x0, Value = (any){ (string)"correct horse battery staple" }, State = (com.sun.star.beans.PropertyState)DIRECT_VALUE }))
+2. explicit-filter load -> None
+3. auto-detect load -> OK
+   filter actually used: Text
+   content: 'ÐÏ#à¡±#á################;###þÿ\t#############################'
+DIAG_EXIT=0

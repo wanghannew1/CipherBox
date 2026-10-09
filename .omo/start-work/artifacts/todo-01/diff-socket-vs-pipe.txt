@@ -1,0 +1,11 @@
+﻿=== diff-socket-vs-pipe (assertion-level, via diff_normalize.py) ===
+EXITCODE: 0
+baseline (socket) normalized check lines: 52
+pipe run normalized check lines:          52
+
+ASSERTION-LEVEL DIFF: NONE
+- identical status per check line, identical order, identical RESULT line
+- the 11 pre-existing failures reproduce exactly (LO 26.8 oox post-decrypt import layer + doc/xls/ppt over-assertions, todo 2 territory)
+- observed divergences are limited to embedded values (component-log byte offsets, ERROR-line URL paths), which are transport-independent
+
+

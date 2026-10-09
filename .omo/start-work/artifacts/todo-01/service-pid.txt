@@ -1,0 +1,7 @@
+﻿service-pid.txt — persistent pipe service left running at task end
+captured: 2026-10-09 11:28:38
+
+PID 6140 soffice.exe (service profile S:\.cipherbox-profile\service, pipe cipherbox-service)
+PID 16280 soffice.bin (service profile S:\.cipherbox-profile\service, pipe cipherbox-service)
+
+relaunch anytime: powershell -NoProfile -ExecutionPolicy Bypass -File lo-encryption-demo\start_soffice.ps1 (idempotent: 'already listening' when up)

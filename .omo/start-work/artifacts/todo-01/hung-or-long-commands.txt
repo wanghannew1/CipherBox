@@ -1,0 +1,35 @@
+﻿=== hung_or_long_commands: readiness timeout fails loudly, nothing left hung ===
+setup: real service stopped; -Soffice pointed at decoy-soffice.cmd ('@exit 0' — simulates a launcher that exits without ever listening); -LaunchReadinessTimeoutSec 8 (shortened from 60s per task guidance)
+
+=== decoy run (8644ms, 40s watchdog) ===
+EXITCODE: 1
+engine deployment unchanged: S:\.cipherbox-profile\service\user\Scripts\python\cipherbox.py
+registration unchanged: S:\.cipherbox-profile\service\user\extensions\shared\cipherbox\components.rdb
+registration unchanged: S:\.cipherbox-profile\service\user\extensions\shared\registry\com.sun.star.comp.deployment.component.PackageRegistryBackend\unorc
+service launched: launcher PID 21628, profile file:///S:/.cipherbox-profile/service, pipe cipherbox-service, TMP=TEMP=S:\.cipherbox-tmp\service
+
+ERROR: service pipe 'cipherbox-service' did not become resolvable within 8 s.
+Process existence diagnostics:
+  no soffice process with the service profile (file:///S:/.cipherbox-profile/service) is running -- the launch may have failed or exited
+  no soffice.exe/soffice.bin process exists at all
+  no pipe matching 'cipherbox-service' exists
+
+
+
+=== post-run process verification ===
+soffice processes remaining: 0
+cipherbox python probes remaining: 0
+decoy cmd.exe remaining: 0
+NOTHING LEFT HUNG: True
+
+=== real service restored via start_soffice.ps1 (2772ms) ===
+EXITCODE: 0
+engine deployment unchanged: S:\.cipherbox-profile\service\user\Scripts\python\cipherbox.py
+registration unchanged: S:\.cipherbox-profile\service\user\extensions\shared\cipherbox\components.rdb
+registration unchanged: S:\.cipherbox-profile\service\user\extensions\shared\registry\com.sun.star.comp.deployment.component.PackageRegistryBackend\unorc
+service launched: launcher PID 6140, profile file:///S:/.cipherbox-profile/service, pipe cipherbox-service, TMP=TEMP=S:\.cipherbox-tmp\service
+service ready: uno:pipe,name=cipherbox-service;urp;StarOffice.ComponentContext resolves
+
+
+
+service restored: True (6140, 16280)

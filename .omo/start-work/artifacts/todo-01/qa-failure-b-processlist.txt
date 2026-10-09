@@ -1,0 +1,35 @@
+﻿=== QA failure (b): employee LO coexistence (service must survive) ===
+
+Captured run (single continuous session; file rewritten once because the first
+write hit a PowerShell array-stringification bug that flattened the listing
+lines to "System.Object[]" -- values below are exactly what that run printed
+to console):
+
+service before employee start:
+  PID 24036 soffice.exe
+  PID 23264 soffice.bin
+
+employee LO launched: launcher PID 20980 (default profile, no -env flag, GUI opens briefly)
+employee soffice.bin up: PID 21960
+
+PROCESS LISTING (coexisting):
+  PID 24036 soffice.exe [SERVICE (S:\.cipherbox-profile\service)]
+  PID 23264 soffice.bin [SERVICE (S:\.cipherbox-profile\service)]
+  PID 20980 soffice.exe [EMPLOYEE (default profile)]
+  PID 21960 soffice.bin [EMPLOYEE (default profile)]
+
+service PID still alive while employee LO runs: True (24036, 23264)
+
+closing employee instance:
+  CloseMainWindow sent to employee soffice.bin PID 21960
+  employee still running 12s after CloseMainWindow (Start Center did not exit) -> force-closed
+  employee instance closed (force-close; throwaway instance)
+
+after employee close:
+service processes still alive: True
+  PID 24036 soffice.exe
+  PID 23264 soffice.bin
+
+VERDICT: PASS -- the dedicated service profile isolates the persistent pipe
+service from the employee's normal LibreOffice instance: both ran
+concurrently, and the service survived the employee instance's full lifecycle.

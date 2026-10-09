@@ -1,0 +1,9 @@
+﻿=== start_soffice.ps1 first run (90s watchdog, elapsed 5156ms) ===
+EXITCODE: 0
+--- STDOUT ---
+engine deployed: C:\code\cipherbox\lo-encryption-demo\src\cipherbox.py -> S:\.cipherbox-profile\service\user\Scripts\python\cipherbox.py
+service launched: launcher PID 11636, profile file:///S:/.cipherbox-profile/service, pipe cipherbox-service, TMP=TEMP=S:\.cipherbox-tmp\service
+service ready: uno:pipe,name=cipherbox-service;urp;StarOffice.ComponentContext resolves
+
+--- STDERR ---
+

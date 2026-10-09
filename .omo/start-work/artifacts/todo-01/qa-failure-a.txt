@@ -1,0 +1,27 @@
+﻿probe-service.py (20s watchdog, elapsed 142ms):
+EXITCODE: 1
+RESOLVE: FAIL com.sun.star.connection.NoConnectException: Connector : couldn't connect to pipe "cipherbox-service": 1
+
+
+
+
+=== check_service.py against STOPPED service (bundled python, 70s hard cap on the script's own 60s bounded connect loop, elapsed 60305ms) ===
+EXITCODE: 1
+--- STDOUT ---
+
+--- STDERR ---
+could not connect to soffice: Connector : couldn't connect to pipe "cipherbox-service": 1
+
+
+
+=== RESTART via start_soffice.ps1 after QA failure (a) (90s watchdog, elapsed 2886ms) ===
+EXITCODE: 0
+--- STDOUT ---
+engine deployment unchanged: S:\.cipherbox-profile\service\user\Scripts\python\cipherbox.py
+registration unchanged: S:\.cipherbox-profile\service\user\extensions\shared\cipherbox\components.rdb
+registration unchanged: S:\.cipherbox-profile\service\user\extensions\shared\registry\com.sun.star.comp.deployment.component.PackageRegistryBackend\unorc
+service launched: launcher PID 24036, profile file:///S:/.cipherbox-profile/service, pipe cipherbox-service, TMP=TEMP=S:\.cipherbox-tmp\service
+service ready: uno:pipe,name=cipherbox-service;urp;StarOffice.ComponentContext resolves
+
+--- STDERR ---
+

@@ -1,0 +1,11 @@
+﻿watchdog: bundled-python probe-connect.py (attempt 2), 20s cap, elapsed 145ms
+EXITCODE: 0
+--- STDOUT ---
+CONNECT: SUCCESS uno:pipe,name=cipherbox-probe;urp;StarOffice.ComponentContext
+REMOTE: ServiceManager = pyuno object (com.sun.star.lang.XMultiComponentFactory)0x176520d9c68{implementationName=com.sun.star.comp.cppuhelper.bootstrap.ServiceManager, supportedServices={com.sun.star.lang.MultiServiceFactory,com.sun.star.lang.ServiceManager}, supportedInterfaces={com.sun.star.uno.XWeak,com.sun.star.lang.XComponent,com.sun.star.lang.XTypeProvider,com.sun.star.lang.XServiceInfo,com.sun.star.lang.XMultiServiceFactory,com.sun.star.lang.XMultiComponentFactory,com.sun.star.container.XSet,com.sun.star.container.XContentEnumerationAccess,com.sun.star.beans.XPropertySet,com.sun.star.beans.XPropertySetInfo,com.sun.star.lang.XEventListener,com.sun.star.lang.XInitialization}}
+REMOTE: ServiceManager implementationName = com.sun.star.comp.cppuhelper.bootstrap.ServiceManager
+REMOTE: Desktop createInstanceWithContext -> OK
+PROBE: OK real UNO bridge over named pipe
+
+--- STDERR ---
+
