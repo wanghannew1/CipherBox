@@ -16,7 +16,7 @@ import time
 import uno
 from com.sun.star.beans import NamedValue, PropertyValue
 
-URL = "uno:socket,host=127.0.0.1,port=2002;urp;StarOffice.ComponentContext"
+URL = "uno:pipe,name=cipherbox-service;urp;StarOffice.ComponentContext"
 OUT_DIR = os.path.join(os.environ.get("TEMP", "."), "cipherbox-docs")
 COMPONENT_LOG = os.path.join(os.environ.get("TEMP", "."), "cipherbox-encryption.log")
 

@@ -14,7 +14,7 @@ import uno
 from com.sun.star.connection import NoConnectException
 
 SERVICE = "com.sun.star.comp.oox.crypto.CipherBoxDataSpace"
-URL = "uno:socket,host=127.0.0.1,port=2002;urp;StarOffice.ComponentContext"
+URL = "uno:pipe,name=cipherbox-service;urp;StarOffice.ComponentContext"
 
 T_PASSWORD = "correct horse battery staple"
 
