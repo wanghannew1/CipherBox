@@ -1,0 +1,5 @@
+-encoding UTF-8
+-nowarn
+-cp "C:/Program Files/LibreOffice/program/classes/libreoffice.jar"
+-d "C:/code/cipherbox/lo-encryption-demo/build/classes"
+"C:/code/cipherbox/lo-encryption-demo/src/com/cipherbox/CipherBoxDataSpace.java"

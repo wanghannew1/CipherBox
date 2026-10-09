@@ -1,0 +1,2 @@
+﻿CipherBox DataSpace
+Custom XPackageEncryption provider for LibreOffice (com.sun.star.comp.oox.crypto.CipherBoxDataSpace).

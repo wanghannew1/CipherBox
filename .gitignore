@@ -1,0 +1,10 @@
+# OMO runtime state
+.omo/run-continuation/
+.omo/boulder.json
+
+# Dev simulation of the S: VeraCrypt volume (subst target, replaced by real volume in Wave 4)
+.s-volume/
+
+# Python
+__pycache__/
+*.pyc
