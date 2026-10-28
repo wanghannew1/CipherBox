@@ -8,3 +8,8 @@
 # Python
 __pycache__/
 *.pyc
+.venv/
+
+# cipherbox server runtime secrets/material (never commit)
+server/certs/
+server/*.db
