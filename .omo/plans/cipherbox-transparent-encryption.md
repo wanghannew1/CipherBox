@@ -105,7 +105,7 @@
 
 ### Wave 1 — 中心服务器（Python + SQLite + HTTPS）
 
-- [ ] 5. 服务器骨架 + 每员工令牌认证（含 TTL/续期/吊销）+ 健康检查（HTTPS）
+- [x] 5. 服务器骨架 + 每员工令牌认证（含 TTL/续期/吊销）+ 健康检查（HTTPS）
   - References: 无既有代码（新增）。技术栈 FastAPI + SQLite（`sqlite3` 或 SQLAlchemy），按 `programming` 约定（类型标注、结构化错误）；HTTPS 用自签证书（OpenSSL 生成，随部署下发，客户端 pin 证书）。
   - Acceptance: `GET /health` 返回 200；受保护端点缺/错 `Authorization: Bearer <token>` 返回 401；令牌存 DB 表 `employees(token_hash, employee, level, issued_at, expires_at, revoked)`（**`employee` 为员工标识列，审计事件的 employee 字段由此解析**），**TTL=90 天**，`POST /token/renew`（认证后且未吊销）续期，`POST /admin/revoke`（管理员）吊销；过期或吊销 token → 401；`/key`/`/events` 均检查吊销态；服务只监听 HTTPS（8443），**不监听 HTTP 端口（连接直接拒绝）**——不做"仅跳转"（跳转会令客户端先发一次带 Bearer 的明文请求）。
   - QA happy: TestClient 断言 health 200、带正确 token 的 `/key` 200、错 token 401；HTTPS 握手成功、HTTP 明文被拒；续期后 expires_at 顺延；吊销后该 token 调 `/key` → 401。

@@ -1,0 +1,32 @@
+spike_interceptor phase 2; products in C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out
+
+=== P2 .uno:SaveAs descriptor rewrite ===
+PASS  P2b dispatch reached interceptor 
+PASS  P2b engine encrypt() ran during interceptor storeToURL 
+PASS  P2b: product written C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out\p2b-selfstore.cbx
+PASS  P2b: OLE/CFB magic 9728 bytes, magic=d0cf11e0a1b11ae1
+PASS  P2b: CFB exposes the 5 engine streams ['\x06DataSpaces/DataSpaceInfo/CipherBoxDataSpace', '\x06DataSpaces/DataSpaceMap', '\x06DataSpaces/TransformInfo/CipherBoxTransform/\x06Primary', '\x06DataSpaces/Version', 'EncryptedPackage']
+PASS  P2b: engine instantiates 
+PASS  P2b: readEncryptionInfo accepts container 
+PASS  P2b: generateEncryptionKey(test password) 
+PASS  P2b: decrypt() returns true 
+PASS  P2b: payload is OOXML ZIP 4974 bytes
+PASS  P2b: marker survives engine round trip 
+PASS  P2b doc medium NOT switched by storeToURL (location still empty) location=''
+P2a delegating .uno:SaveAs with pre-set URL/FilterName/Password/EncryptionData (picker-free attempt; watchdog guards a hang)...
+PASS  P2a delegate SaveAs returned (no picker hang) 
+PASS  P2a engine encrypt() ran during delegated SaveAs 
+PASS  P2a: product written C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out\p2a-delegate.cbx
+PASS  P2a: OLE/CFB magic 9728 bytes, magic=d0cf11e0a1b11ae1
+PASS  P2a: CFB exposes the 5 engine streams ['\x06DataSpaces/DataSpaceInfo/CipherBoxDataSpace', '\x06DataSpaces/DataSpaceMap', '\x06DataSpaces/TransformInfo/CipherBoxTransform/\x06Primary', '\x06DataSpaces/Version', 'EncryptedPackage']
+PASS  P2a: engine instantiates 
+PASS  P2a: readEncryptionInfo accepts container 
+PASS  P2a: generateEncryptionKey(test password) 
+PASS  P2a: decrypt() returns true 
+PASS  P2a: payload is OOXML ZIP 4972 bytes
+PASS  P2a: marker survives engine round trip 
+PASS  P2a doc medium switched to the .cbx target (SaveAs semantics) location='file:///C:/Users/22419/AppData/Local/Temp/cipherbox-spike4-out/p2a-delegate.cbx'
+PASS  P2a doc unmodified after delegated SaveAs 
+PROBE P2 SaveAs rewrite: see PASS/FAIL above
+
+RESULT: PASS phase 2

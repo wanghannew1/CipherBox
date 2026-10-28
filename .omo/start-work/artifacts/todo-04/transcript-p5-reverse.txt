@@ -1,0 +1,20 @@
+spike_interceptor phase 5; products in C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out
+
+=== P5 reverse channel: callback invoked from dispatch path ===
+NOTE  P5 bridge RTT baseline (agent->LO simple getter) -- 0.24 ms
+PASS  P5 agent-side callback invoked from the dispatch path [('getMasterKey', 'forced-saveas', 1793150165.5093212), ('reportEvent', 'encrypt', 'file:///C:/Users/22419/AppData/Local/Temp/cipherbox-spike4-out/p5-callback.cbx', 1793150165.7100084)]
+PASS  P5 callback-supplied key drove the encryption (round trip) 
+NOTE  P5 getMasterKey latency (in-proc here; LO->agent adds ~1 RTT) -- 0.003 ms; bridge RTT 0.24 ms
+PASS  P5 audit reportEvent delivered 
+PASS  P5: product written C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out\p5-callback.cbx
+PASS  P5: OLE/CFB magic 9728 bytes, magic=d0cf11e0a1b11ae1
+PASS  P5: CFB exposes the 5 engine streams ['\x06DataSpaces/DataSpaceInfo/CipherBoxDataSpace', '\x06DataSpaces/DataSpaceMap', '\x06DataSpaces/TransformInfo/CipherBoxTransform/\x06Primary', '\x06DataSpaces/Version', 'EncryptedPackage']
+PASS  P5: engine instantiates 
+PASS  P5: readEncryptionInfo accepts container 
+PASS  P5: generateEncryptionKey(test password) 
+PASS  P5: decrypt() returns true 
+PASS  P5: payload is OOXML ZIP 4971 bytes
+PASS  P5: marker survives engine round trip 
+PROBE P5 reverse channel: mechanism = agent-side unohelper.Base object passed at registration; invocations cross the pipe bridge via PyUNO XInvocation; measured RTT 0.24 ms
+
+RESULT: PASS phase 5

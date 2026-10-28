@@ -1,0 +1,31 @@
+spike_interceptor phase 8; products in C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out
+
+=== P8 export/print/send family ===
+NOTE  P8 queryDispatch .uno:ExportDirectToPDF   -- chain-fired=True slave-has-handler=True
+PASS  P8 .uno:ExportDirectToPDF traverses the interceptor chain 
+NOTE  P8 queryDispatch .uno:ExportTo            -- chain-fired=True slave-has-handler=True
+PASS  P8 .uno:ExportTo traverses the interceptor chain 
+NOTE  P8 queryDispatch .uno:ExportToPDF         -- chain-fired=True slave-has-handler=True
+PASS  P8 .uno:ExportToPDF traverses the interceptor chain 
+NOTE  P8 queryDispatch .uno:Print               -- chain-fired=True slave-has-handler=True
+PASS  P8 .uno:Print traverses the interceptor chain 
+NOTE  P8 queryDispatch .uno:PrintDefault        -- chain-fired=True slave-has-handler=True
+PASS  P8 .uno:PrintDefault traverses the interceptor chain 
+NOTE  P8 queryDispatch .uno:SendDocAsPDF        -- chain-fired=True slave-has-handler=True
+PASS  P8 .uno:SendDocAsPDF traverses the interceptor chain 
+NOTE  P8 queryDispatch .uno:SendMail            -- chain-fired=True slave-has-handler=True
+PASS  P8 .uno:SendMail traverses the interceptor chain 
+PASS  P8 .uno:ExportTo intercepted 
+NOTE  P8 ExportTo delegated outcome -- product=False -- delegation with pre-set descriptor silently no-ops headless (same picker-bound class as SaveACopy); interception itself is proven, so the audit hook is viable
+PASS  P8 ExportTo delegation produced no product headless (finding) 
+PASS  P8 ExportTo: engine encrypt() NOT invoked 
+PASS  P8 .uno:ExportDirectToPDF intercepted 
+PASS  P8 ExportDirectToPDF product written C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out\p8-direct.pdf
+PASS  P8 ExportDirectToPDF product is PLAINTEXT PDF magic=b'%PDF-1.7'
+PASS  P8 ExportDirectToPDF: engine encrypt() NOT invoked 
+P8 executing .uno:ExportToPDF with URL pre-set (watchdog guards a hang)...
+NOTE  P8 ExportToPDF returned (no picker hang) -- dispatched=True
+NOTE  P8 ExportToPDF product -- NONE -- returned without writing to the pre-set URL (dialog-oriented slot headless; use ExportDirectToPDF for the executable variant)
+PROBE P8 export/print/send family: see PASS/FAIL above
+
+RESULT: PASS phase 8

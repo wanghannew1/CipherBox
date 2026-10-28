@@ -1,0 +1,14 @@
+spike_open_loop phase=stateA pid=21308 time=2026-10-28 09:18:06
+service pids (must stay untouched): [11576, 18512]
+stateA: employee LO launcher PID 11624 (default profile)
+PASS  stateA: employee default-profile LO running pids=[11624, 17156]
+PASS  stateA: controlled instance started alongside employee LO pids=[5848, 20280]
+PASS  stateA: controlled pipe resolves while employee LO runs 
+PASS  stateA: employee LO still alive (independent of controlled) pids=[11624, 17156]
+PASS  stateA: shared service untouched pids=[11576, 18512]
+stateA: closing employee PID 11624
+stateA: closing employee PID 17156
+PASS  stateA: no controlled/employee residue 
+service pids at end (must equal start): [11576, 18512]
+elapsed 5.9 s
+RESULT: PASS (stateA)

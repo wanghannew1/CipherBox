@@ -1,0 +1,12 @@
+spike_interceptor phase 1; products in C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out
+
+=== P1 register interceptor; queryDispatch fires ===
+PASS  P1 registration wired the slave provider 
+PASS  P1 queryDispatch fired for .uno:SaveAs 
+PASS  P1 dispatch() reached the interceptor 
+PASS  P1 swallowed save left doc modified (slave never ran) 
+PASS  P1 non-captured dispatch still traverses the chain 
+PASS  P1 non-captured dispatch NOT claimed by interceptor 
+PROBE P1 XDispatchProviderInterceptor registration/queryDispatch: see PASS/FAIL above
+
+RESULT: PASS phase 1

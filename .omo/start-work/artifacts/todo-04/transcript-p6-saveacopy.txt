@@ -1,0 +1,20 @@
+spike_interceptor phase 6; products in C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out
+
+=== P6 .uno:SaveACopy intercept + rewrite ===
+PASS  P6 .uno:SaveACopy intercepted 
+NOTE  P6 delegated SaveACopy outcome -- product=False engine-ran=False -- delegation with pre-set descriptor is a silent no-op headless (slot is picker-bound; contrast with SaveAs)
+PASS  P6 delegated SaveACopy wrote nothing (picker-bound slot finding) 
+PASS  P6 self-store engine encrypt() ran 
+PASS  P6-selfstore: product written C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out\p6-saveacopy.cbx
+PASS  P6-selfstore: OLE/CFB magic 9728 bytes, magic=d0cf11e0a1b11ae1
+PASS  P6-selfstore: CFB exposes the 5 engine streams ['\x06DataSpaces/DataSpaceInfo/CipherBoxDataSpace', '\x06DataSpaces/DataSpaceMap', '\x06DataSpaces/TransformInfo/CipherBoxTransform/\x06Primary', '\x06DataSpaces/Version', 'EncryptedPackage']
+PASS  P6-selfstore: engine instantiates 
+PASS  P6-selfstore: readEncryptionInfo accepts container 
+PASS  P6-selfstore: generateEncryptionKey(test password) 
+PASS  P6-selfstore: decrypt() returns true 
+PASS  P6-selfstore: payload is OOXML ZIP 4972 bytes
+PASS  P6-selfstore: marker survives engine round trip 
+PASS  P6 doc medium NOT switched (SaveACopy semantics kept) location=''
+PROBE P6 SaveACopy: see PASS/FAIL above
+
+RESULT: PASS phase 6

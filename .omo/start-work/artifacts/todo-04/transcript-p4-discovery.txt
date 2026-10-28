@@ -1,0 +1,13 @@
+spike_interceptor phase 4; products in C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out
+
+=== P4 new-frame discovery: Components diff vs queryFrames vs GEB ===
+NOTE  P4 baseline -- components=0 frames=1
+PASS  P4 Desktop.Components diff sees the new document +1 ['<untitled:未命名 1>']
+PASS  P4 Desktop.Frames queryFrames diff sees the new frame +1
+NOTE  P4 GEB events on document load -- ['OnCreate', 'OnStorageChanged', 'OnLayoutFinished', 'OnPageCountChange', 'OnTitleChanged', 'OnFocus', 'OnNew', 'OnViewCreated', 'OnTitleChanged', 'OnModifyChanged', 'OnLayoutFinished']
+PASS  P4 GlobalEventBroadcaster fired document event(s) ['OnCreate', 'OnStorageChanged', 'OnLayoutFinished', 'OnPageCountChange', 'OnTitleChanged', 'OnFocus', 'OnNew', 'OnViewCreated', 'OnTitleChanged', 'OnModifyChanged', 'OnLayoutFinished']
+NOTE  P4 createViewController headless -- RAISED Create,
+frame without container window not allowed -- second view of the same doc is not creatable headless (container window required); GEB OnViewCreated fired for the initial view, queryFrames polling sees all frames regardless
+PROBE P4 new-frame discovery: see PASS/FAIL above
+
+RESULT: PASS phase 4

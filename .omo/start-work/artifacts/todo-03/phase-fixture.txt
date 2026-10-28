@@ -1,0 +1,15 @@
+spike_open_loop phase=fixture pid=9572 time=2026-10-28 09:12:23
+service pids (must stay untouched): [11576, 18512]
+PASS  fixture: marker plaintext docx written 
+PASS  fixture: plaintext reloads on service 
+PASS  fixture: .cbx written S:\.cipherbox-tmp\spike-todo-03\fixture\spike-marker.docx.cbx
+PASS  fixture: OLE/CFB magic d0cf11e0a1b11ae1
+PASS  fixture: EncryptedPackage mark 
+PASS  fixture: no EncryptionInfo stream (agile-only) 
+PASS  fixture: engine encrypt() ran on save 
+PASS  fixture: engine decrypt() round trip returns PK payload 5367 bytes
+PASS  fixture: marker survives engine decrypt 
+PASS  fixture: build plaintext removed 
+service pids at end (must equal start): [11576, 18512]
+elapsed 0.9 s
+RESULT: PASS (fixture)

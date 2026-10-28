@@ -1,0 +1,12 @@
+spike_interceptor phase 3; products in C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out
+
+=== P3 second frame: per-frame registration evidence ===
+NOTE  P3 frame1 chain background query traffic (menu/status polling is constant even headless; 135 queries) -- first=['.uno:ImageOrientation', '.uno:ModifiedStatus', '.uno:StatePageNumber', '.uno:StateWordCount']
+PASS  P3 frame2's SaveAs DISPATCH never reached frame1's interceptor ic1.dispatches=[]
+PASS  P3 unintercepted frame2 SaveAs wrote a product C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out\p3-frame2-plain.docx
+PASS  P3 unintercepted product is PLAINTEXT docx (PK) magic=504b030414000808
+PASS  P3 after registering on frame2 its SaveAs IS intercepted 
+PASS  P3 swallowed by frame2 interceptor: no product written 
+PROBE P3 per-frame registration: see PASS/FAIL above
+
+RESULT: PASS phase 3

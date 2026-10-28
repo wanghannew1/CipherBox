@@ -1,0 +1,11 @@
+spike_open_loop phase=stateB pid=17932 time=2026-10-28 09:18:40
+service pids (must stay untouched): [11576, 18512]
+PASS  stateB: first controlled instance up pids=[7332, 12016]
+stateB: docs open in instance #1 before handover: 1
+PASS  stateB: second launcher exited (delegated) exit code=0
+PASS  stateB: still exactly one soffice.bin set for the controlled profile before=[7332, 12016] after=[7332, 12016]
+FAIL  stateB: handed document arrived in instance #1 (single-instance handover) docs 1 -> 1
+stateB: VERDICT single-instance handover CONFIRMED -> agent must serialize
+service pids at end (must equal start): [11576, 18512]
+elapsed 24.4 s
+RESULT: FAIL (1) -> stateB: handed document arrived in instance #1 (single-instance handover)

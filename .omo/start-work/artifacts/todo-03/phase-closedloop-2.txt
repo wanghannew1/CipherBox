@@ -1,0 +1,18 @@
+spike_open_loop phase=closedloop pid=6160 time=2026-10-28 09:17:49
+service pids (must stay untouched): [11576, 18512]
+closedloop(cycle 2): session dir S:\.cipherbox-tmp\b4b7e35b-995a-41d2-9b11-ca7bf68f724c
+PASS  closedloop(cycle 2): engine-API decrypt to temp plaintext 5367 bytes sha256=ccf32f542a48
+  close status=closed-event elapsed=0.03s events=['notifyClosing', 'disposing']
+closedloop(cycle 2): controlled PIDs to terminate: [19756, 19916]
+PASS  closedloop(cycle 2): controlled PID 19756 terminated 
+PASS  closedloop(cycle 2): controlled PID 19916 terminated 
+PASS  closedloop(cycle 2): doc-close event fired (XCloseListener/XEventListener) events=['notifyClosing', 'disposing'] elapsed=0.03s
+PASS  closedloop(cycle 2): close wait was bounded (<=30s) 
+PASS  closedloop(cycle 2): engine encrypt() ran on re-encrypt 
+PASS  closedloop(cycle 2): re-encrypted .cbx = CFB + engine-decrypt marker 
+PASS  closedloop(cycle 2): re-encrypted payload is an OOXML ZIP with the marker 5362 bytes (orig 5367, sha ccf32f542a48)
+PASS  closedloop(cycle 2): session dir fully clean (no plaintext, no lock) leftovers=[]
+PASS  closedloop(cycle 2): no plaintext copy under controlled profile (backup/autorecovery) hits=[]
+service pids at end (must equal start): [11576, 18512]
+elapsed 5.2 s
+RESULT: PASS (closedloop)

@@ -1,0 +1,5 @@
+﻿CMD: uvicorn server.app:create_app --factory --host 127.0.0.1 --port 8443 --ssl-certfile server/certs/server.crt --ssl-keyfile server/certs/server.key ; then venv-python httpx.get('https://localhost:8443/health', verify='server/certs/ca.crt') ; then curl http://localhost:8443/health (expect rejection)
+port 8443 reachable: True
+HTTPS /health -> 200 {"status":"ok"} (exit 0)
+plain HTTP /health -> curl exit 52 (52=empty reply: TLS-only port refused cleartext) : 
+uvicorn (pid 19580) stopped

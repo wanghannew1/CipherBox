@@ -1,0 +1,28 @@
+spike_interceptor phase 7; products in C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out
+
+=== P7 Save-after-SaveAs: EncryptionData retention (critical) ===
+PASS  P7 SaveAs intercepted+delegated 
+PASS  P7-SaveAs: product written C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out\p7-doc.cbx
+PASS  P7-SaveAs: OLE/CFB magic 9728 bytes, magic=d0cf11e0a1b11ae1
+PASS  P7-SaveAs: CFB exposes the 5 engine streams ['\x06DataSpaces/DataSpaceInfo/CipherBoxDataSpace', '\x06DataSpaces/DataSpaceMap', '\x06DataSpaces/TransformInfo/CipherBoxTransform/\x06Primary', '\x06DataSpaces/Version', 'EncryptedPackage']
+PASS  P7-SaveAs: engine instantiates 
+PASS  P7-SaveAs: readEncryptionInfo accepts container 
+PASS  P7-SaveAs: generateEncryptionKey(test password) 
+PASS  P7-SaveAs: decrypt() returns true 
+PASS  P7-SaveAs: payload is OOXML ZIP 4975 bytes
+PASS  P7-SaveAs: marker survives engine round trip 
+PASS  P7 .uno:Save intercepted 
+PASS  P7 product rewritten by .uno:Save before=9728B after=9728B
+NOTE  P7 product after Save -- STILL CFB -- medium kept EncryptionData
+PASS  P7-Save: product written C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out\p7-doc.cbx
+PASS  P7-Save: OLE/CFB magic 9728 bytes, magic=d0cf11e0a1b11ae1
+PASS  P7-Save: CFB exposes the 5 engine streams ['\x06DataSpaces/DataSpaceInfo/CipherBoxDataSpace', '\x06DataSpaces/DataSpaceMap', '\x06DataSpaces/TransformInfo/CipherBoxTransform/\x06Primary', '\x06DataSpaces/Version', 'EncryptedPackage']
+PASS  P7-Save: engine instantiates 
+PASS  P7-Save: readEncryptionInfo accepts container 
+PASS  P7-Save: generateEncryptionKey(test password) 
+PASS  P7-Save: decrypt() returns true 
+PASS  P7-Save: payload is OOXML ZIP 4988 bytes
+PASS  P7-Save: marker survives engine round trip 
+PROBE P7 Save-after-SaveAs: see PASS/FAIL above
+
+RESULT: PASS phase 7

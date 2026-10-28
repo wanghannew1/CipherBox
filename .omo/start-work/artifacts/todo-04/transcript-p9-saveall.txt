@@ -1,0 +1,14 @@
+spike_interceptor phase 9; products in C:\Users\22419\AppData\Local\Temp\cipherbox-spike4-out
+
+=== P9 .uno:SaveAll routing ===
+NOTE  P9a headless SaveAll WITHOUT interceptor (frame-routed) -- saved=[False, False] settle=>5s never
+NOTE  P9a headless SaveAll WITHOUT interceptor (desktop-routed) -- saved=[False, False] settle=>5s never
+NOTE  P9b SaveAll queryDispatch seen per frame -- [True, False]
+NOTE  P9b SaveAll dispatch seen per frame -- [True, False]
+NOTE  P9b per-doc .uno:Save dispatch seen per frame -- [False, False]
+PASS  P9 SaveAll traverses ONLY the frame chain it was dispatched on (single-frame routing, not broadcast) q=[True, False] d=[True, False]
+PASS  P9 per-document stores do NOT traverse any frame dispatch chain [False, False]
+NOTE  P9b delegated SaveAll saved docs -- [False, False]
+PROBE P9 SaveAll routing: see PASS/FAIL above
+
+RESULT: PASS phase 9

@@ -1,0 +1,18 @@
+﻿CMD: powershell -ExecutionPolicy Bypass -File server/scripts/make_certs.ps1  (cwd=C:\code\cipherbox)
+[1/4] CA key + self-signed CA cert
+[2/4] server key + CSR (CN=localhost)
+[3/4] sign server cert with SAN DNS:localhost IP:127.0.0.1
+Certificate request self-signature ok
+subject=CN = localhost
+[4/4] verify chain
+
+Done. Material in C:\code\cipherbox\server\certs
+  ca.crt     -> distribute to clients for certificate pinning
+  server.crt -> uvicorn --ssl-certfile
+  server.key -> uvicorn --ssl-keyfile (keep secret)
+
+Run (HTTPS only, port 8443):
+  server\.venv\Scripts\python.exe -m uvicorn server.app:create_app --factory `
+    --host 0.0.0.0 --port 8443 `
+    --ssl-certfile server\certs\server.crt --ssl-keyfile server\certs\server.key
+EXIT: 0  ELAPSED: 1.4988803s
