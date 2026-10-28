@@ -7,19 +7,22 @@ from :meth:`CipherBoxDataSpace.createEncryptionData`.
 The MS-OFFCRYPTO DataSpaces container layout is reproduced byte-for-byte from the reference
 sample (bzzzil/lo_custom_encryption); only the payload cipher is upgraded from XOR to
 AES-256-CBC.  AES is obtained from the Windows CNG provider through ``ctypes`` so the
-component has no third-party dependency.
+component has no third-party dependency.  All pure cryptography lives in the sibling
+module ``cipherbox_crypto`` (no ``uno`` dependency) and is only re-exported here.
+
+``encrypt()`` is fail-closed: it refuses to run unless the key came from a trusted
+provenance (the ``CipherBoxKey`` NamedValue, a non-empty ``Password``, or a
+verifier-verified ``generateEncryptionKey()``), so an empty/missing password can never
+produce "fake ciphertext".  The load/decrypt paths are unchanged.
 """
 
 from __future__ import annotations
 
-import ctypes
 import hashlib
-import hmac
 import os
 import sys
 import tempfile
 import traceback
-from ctypes import wintypes
 
 import uno
 import unohelper
@@ -29,6 +32,29 @@ from com.sun.star.lang import (
     XSingleServiceFactory,
 )
 from com.sun.star.packages import XPackageEncryption
+
+# Pure cryptography lives in cipherbox_crypto (no uno dependency) so the Agent-side
+# container parser shares this exact implementation.  Only re-exported here; the
+# algorithms are unchanged.
+from cipherbox_crypto import (  # noqa: E402
+    IV_LEN,
+    KEY_LEN,
+    PBKDF2_ITERATIONS,
+    PBKDF2_SALT,
+    VERIFIER_HASH_LEN,
+    VERIFIER_MAGIC,
+    VERIFIER_SALT_LEN,
+    VERIFIER_TRAILER_LEN,
+    _i64,
+    _parse_verifier,
+    _pkcs7_pad,
+    _pkcs7_unpad,
+    aes_cbc,
+    derive_key,
+    derive_verifier,
+    make_verifier,
+    verifier_matches,
+)
 
 SERVICE_NAME = "com.sun.star.comp.oox.crypto.CipherBoxDataSpace"
 IMPL_NAME = "com.sun.star.comp.oox.crypto.IMPL.CipherBoxDataSpace"
@@ -56,22 +82,13 @@ STREAM_TRANSFORMINFO = (
 )
 STREAM_ENCRYPTEDPACKAGE = "EncryptedPackage"
 
-IV_LEN = 16
-KEY_LEN = 32
-PBKDF2_ITERATIONS = 20000
-PBKDF2_SALT = b"CipherBoxDataSpace-v1"
-
 # Password-verification block.  oox decides whether a candidate password is correct purely
 # from the boolean returned by XPackageEncryption::generateEncryptionKey() -- see
 # PasswordVerifier::verifyPassword() in oox/source/core/filterdetect.cxx, which only calls
 # createEncryptionData() when that boolean is true.  A component that always returns true
 # therefore makes *every* password "correct", which is why LibreOffice's built-in
 # "VelvetSweatshop" default probe would always win and the real password was never reached.
-# These values let the engine answer that question honestly.
-VERIFIER_MAGIC = b"CBPV"
-VERIFIER_SALT_LEN = 16
-VERIFIER_HASH_LEN = 32
-VERIFIER_TRAILER_LEN = 4 + 4 + VERIFIER_SALT_LEN + 4 + VERIFIER_HASH_LEN
+# The verifier constants themselves live in cipherbox_crypto (imported above).
 
 _LOG_PATH = os.path.join(tempfile.gettempdir(), "cipherbox-encryption.log")
 
@@ -90,218 +107,12 @@ def _log(message: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Windows CNG (bcrypt.dll) AES-256-CBC
-# ---------------------------------------------------------------------------
-
-_BCRYPT_SUCCESS = 0
-_PBYTE = ctypes.POINTER(ctypes.c_ubyte)
-
-
-def _load_bcrypt():
-    dll = ctypes.WinDLL("bcrypt.dll")
-    dll.BCryptOpenAlgorithmProvider.argtypes = [
-        ctypes.POINTER(ctypes.c_void_p),
-        ctypes.c_wchar_p,
-        ctypes.c_wchar_p,
-        wintypes.ULONG,
-    ]
-    dll.BCryptOpenAlgorithmProvider.restype = ctypes.c_long
-    dll.BCryptCloseAlgorithmProvider.argtypes = [ctypes.c_void_p, wintypes.ULONG]
-    dll.BCryptCloseAlgorithmProvider.restype = ctypes.c_long
-    dll.BCryptSetProperty.argtypes = [
-        ctypes.c_void_p,
-        ctypes.c_wchar_p,
-        _PBYTE,
-        wintypes.ULONG,
-        wintypes.ULONG,
-    ]
-    dll.BCryptSetProperty.restype = ctypes.c_long
-    dll.BCryptGetProperty.argtypes = [
-        ctypes.c_void_p,
-        ctypes.c_wchar_p,
-        _PBYTE,
-        wintypes.ULONG,
-        ctypes.POINTER(wintypes.ULONG),
-        wintypes.ULONG,
-    ]
-    dll.BCryptGetProperty.restype = ctypes.c_long
-    dll.BCryptGenerateSymmetricKey.argtypes = [
-        ctypes.c_void_p,
-        ctypes.POINTER(ctypes.c_void_p),
-        _PBYTE,
-        wintypes.ULONG,
-        _PBYTE,
-        wintypes.ULONG,
-        wintypes.ULONG,
-    ]
-    dll.BCryptGenerateSymmetricKey.restype = ctypes.c_long
-    dll.BCryptDestroyKey.argtypes = [ctypes.c_void_p]
-    dll.BCryptDestroyKey.restype = ctypes.c_long
-    for name in ("BCryptEncrypt", "BCryptDecrypt"):
-        fn = getattr(dll, name)
-        fn.argtypes = [
-            ctypes.c_void_p,
-            _PBYTE,
-            wintypes.ULONG,
-            ctypes.c_void_p,
-            _PBYTE,
-            wintypes.ULONG,
-            _PBYTE,
-            wintypes.ULONG,
-            ctypes.POINTER(wintypes.ULONG),
-            wintypes.ULONG,
-        ]
-        fn.restype = ctypes.c_long
-    return dll
-
-
-def _as_pbuf(data: bytes):
-    """Wrap bytes in a c_ubyte array; ctypes keeps it alive for the duration of the call."""
-    if not data:
-        return ctypes.cast(None, _PBYTE)
-    return (ctypes.c_ubyte * len(data)).from_buffer_copy(data)
-
-
-def _cbc_raw(key: bytes, iv: bytes, data: bytes, encrypt: bool) -> bytes:
-    """Raw AES-256-CBC block transform via Windows CNG (no padding applied)."""
-    if len(key) != KEY_LEN:
-        raise ValueError("AES-256 needs a %d-byte key, got %d" % (KEY_LEN, len(key)))
-    if len(iv) != IV_LEN:
-        raise ValueError("AES-CBC needs a %d-byte IV, got %d" % (IV_LEN, len(iv)))
-    if not data:
-        # CNG rejects a zero-length CBC transform (input must be a whole number of blocks).
-        return b""
-    if len(data) % 16:
-        raise ValueError("AES-CBC input must be a multiple of 16 bytes, got %d" % len(data))
-
-    dll = _load_bcrypt()
-    alg = ctypes.c_void_p()
-    status = dll.BCryptOpenAlgorithmProvider(ctypes.byref(alg), "AES", None, 0)
-    if status != _BCRYPT_SUCCESS:
-        raise OSError("BCryptOpenAlgorithmProvider failed: 0x%08X" % (status & 0xFFFFFFFF))
-
-    key_handle = ctypes.c_void_p()
-    try:
-        mode = "ChainingModeCBC".encode("utf-16-le") + b"\x00\x00"
-        mode_buf = (ctypes.c_ubyte * len(mode)).from_buffer_copy(mode)
-        status = dll.BCryptSetProperty(alg, "ChainingMode", mode_buf, len(mode), 0)
-        if status != _BCRYPT_SUCCESS:
-            raise OSError("BCryptSetProperty(ChainingMode) failed: 0x%08X" % (status & 0xFFFFFFFF))
-
-        # The symmetric key object size is provider-defined and BCryptGetProperty is not
-        # reliable across providers, so grow the buffer until the call succeeds.
-        status = 0
-        for object_size in (32, 64, 128, 256, 512, 1024, 2048, 4096):
-            key_object = (ctypes.c_ubyte * object_size)()
-            status = dll.BCryptGenerateSymmetricKey(
-                alg,
-                ctypes.byref(key_handle),
-                ctypes.cast(key_object, _PBYTE),
-                object_size,
-                _as_pbuf(key),
-                len(key),
-                0,
-            )
-            if status == _BCRYPT_SUCCESS:
-                _log("key object buffer = %d bytes" % object_size)
-                break
-            key_handle = ctypes.c_void_p()
-        if status != _BCRYPT_SUCCESS:
-            raise OSError(
-                "BCryptGenerateSymmetricKey failed: 0x%08X" % (status & 0xFFFFFFFF)
-            )
-
-        out = (ctypes.c_ubyte * (len(data) + 32))()
-        produced = wintypes.ULONG(0)
-        fn = dll.BCryptEncrypt if encrypt else dll.BCryptDecrypt
-        status = fn(
-            key_handle,
-            _as_pbuf(data),
-            len(data),
-            None,
-            _as_pbuf(iv),
-            len(iv),
-            ctypes.cast(out, _PBYTE),
-            len(out),
-            ctypes.byref(produced),
-            0,
-        )
-        if status != _BCRYPT_SUCCESS:
-            raise OSError(
-                "BCrypt%s failed: 0x%08X" % ("Encrypt" if encrypt else "Decrypt", status & 0xFFFFFFFF)
-            )
-        return bytes(bytearray(out[: produced.value]))
-    finally:
-        if key_handle:
-            dll.BCryptDestroyKey(key_handle)
-        dll.BCryptCloseAlgorithmProvider(alg, 0)
-
-
-def _pkcs7_pad(data: bytes) -> bytes:
-    pad = 16 - (len(data) % 16)
-    return data + bytes([pad]) * pad
-
-
-def _pkcs7_unpad(data: bytes) -> bytes:
-    if not data or len(data) % 16:
-        raise ValueError("invalid PKCS#7 payload length %d" % len(data))
-    pad = data[-1]
-    if pad < 1 or pad > 16 or data[-pad:] != bytes([pad]) * pad:
-        raise ValueError("invalid PKCS#7 padding (key mismatch or corrupt payload)")
-    return data[:-pad]
-
-
-def aes_cbc(key: bytes, iv: bytes, data: bytes, encrypt: bool) -> bytes:
-    """AES-256-CBC with PKCS#7 padding, as used for the EncryptedPackage payload."""
-    if encrypt:
-        return _cbc_raw(key, iv, _pkcs7_pad(data), True)
-    return _pkcs7_unpad(_cbc_raw(key, iv, data, False))
-
-
-def derive_key(password: str) -> bytes:
-    """PBKDF2-HMAC-SHA256, 20000 iterations, fixed salt -> 32-byte AES key."""
-    return hashlib.pbkdf2_hmac(
-        "sha256", (password or "").encode("utf-8"), PBKDF2_SALT, PBKDF2_ITERATIONS, KEY_LEN
-    )
-
-
-def derive_verifier(password: str, salt: bytes) -> bytes:
-    """Per-file password verifier: PBKDF2 over a *random* per-file salt.
-
-    The AES key itself uses a fixed salt (see derive_key), so a verifier is needed to tell
-    oox whether a candidate password is correct before anything is decrypted.  A per-file
-    random salt keeps the verifier from being precomputable across files.
-    """
-    return hashlib.pbkdf2_hmac(
-        "sha256", (password or "").encode("utf-8"), salt, PBKDF2_ITERATIONS, VERIFIER_HASH_LEN
-    )
-
-
-def make_verifier(password: str):
-    """Return ``(salt, hash)`` for a fresh password verifier."""
-    salt = os.urandom(VERIFIER_SALT_LEN)
-    return salt, derive_verifier(password, salt)
-
-
-def verifier_matches(password: str, salt: bytes, expected: bytes) -> bool:
-    """Constant-time check of ``password`` against a stored verifier."""
-    if not salt or not expected:
-        # No verifier stored (e.g. a pre-existing file): accept, to stay backward compatible.
-        return True
-    return hmac.compare_digest(derive_verifier(password, salt), expected)
-
-
-# ---------------------------------------------------------------------------
 # MS-OFFCRYPTO DataSpaces container streams
 # ---------------------------------------------------------------------------
 
 
 def _i32(value: int) -> bytes:
     return int(value).to_bytes(4, "little", signed=False)
-
-
-def _i64(value: int) -> bytes:
-    return int(value).to_bytes(8, "little", signed=True)
 
 
 def _utf16_field(text: str) -> bytes:
@@ -349,34 +160,6 @@ def _verifier_trailer(salt: bytes, digest: bytes) -> bytes:
             digest,
         ]
     )
-
-
-def _parse_verifier(blob: bytes):
-    """Recover ``(salt, hash)`` from a DataSpaceInfo stream, or ``(None, None)``.
-
-    The verifier is a fixed-shape trailer appended to DataSpaceInfo, so it is located at a
-    known offset from the end and then validated field by field.  A file written before the
-    verifier existed simply has no trailer and is treated as "no verifier" (which
-    verifier_matches() accepts, keeping old files loadable).
-    """
-    if not blob or len(blob) < VERIFIER_TRAILER_LEN:
-        return None, None
-    start = len(blob) - VERIFIER_TRAILER_LEN
-    if blob[start : start + 4] != VERIFIER_MAGIC:
-        return None, None
-    offset = start + 4
-    salt_len = int.from_bytes(blob[offset : offset + 4], "little", signed=False)
-    offset += 4
-    if salt_len != VERIFIER_SALT_LEN:
-        return None, None
-    salt = bytes(blob[offset : offset + salt_len])
-    offset += salt_len
-    hash_len = int.from_bytes(blob[offset : offset + 4], "little", signed=False)
-    offset += 4
-    if hash_len != VERIFIER_HASH_LEN or offset + hash_len != len(blob):
-        return None, None
-    digest = bytes(blob[offset : offset + hash_len])
-    return salt, digest
 
 
 def data_space_info(salt: bytes = None, digest: bytes = None) -> bytes:
@@ -580,6 +363,11 @@ class CipherBoxDataSpace(unohelper.Base, XServiceInfo, XInitialization, XPackage
         self._verifier_hash = None
         # Whether the active key was derived from a password that passed verification.
         self._key_verified = False
+        # Fail-closed gate for encrypt(): True only when the key came from a trusted
+        # provenance -- the CipherBoxKey NamedValue, a NON-EMPTY Password, or a
+        # verifier-verified generateEncryptionKey().  The empty-password / demo-key
+        # fallbacks below leave this False so encrypt() refuses to mint "fake ciphertext".
+        self._key_trusted = False
         # TempFile-backed streams handed to oox: pinned so the backing files outlive us.
         self._streams = []
 
@@ -608,6 +396,8 @@ class CipherBoxDataSpace(unohelper.Base, XServiceInfo, XInitialization, XPackage
     def createEncryptionData(self, password):
         _log("createEncryptionData(password=%s)" % _mask(password))
         self._key = derive_key(password)
+        # A non-empty password is a legitimate key provenance; an empty one is not.
+        self._key_trusted = bool(password)
         return (
             _named_value(NV_CRYPTO_TYPE, CRYPTO_TYPE),
             _named_value(NV_KEY, uno.ByteSequence(self._key)),
@@ -624,13 +414,14 @@ class CipherBoxDataSpace(unohelper.Base, XServiceInfo, XInitialization, XPackage
                 raw = bytes(value) if not isinstance(value, bytes) else value
                 if raw:
                     self._key = raw
+                    self._key_trusted = True
                     _log("key recovered from media encryption data (%d bytes)" % len(raw))
                     return True
             elif getattr(nv, "Name", None) == NV_PASSWORD:
                 value = nv.Value
                 if value is not None:
                     password = value
-        if password is not None:
+        if password:
             # oox's save path supplies the password here and never round-trips CipherBoxKey,
             # so the key has to be derived from it -- otherwise the password would be
             # ignored and every file would share the fixed demo key.
@@ -639,15 +430,31 @@ class CipherBoxDataSpace(unohelper.Base, XServiceInfo, XInitialization, XPackage
             # whether a candidate password is actually right.
             self._verifier_salt, self._verifier_hash = make_verifier(password)
             self._key_verified = True
+            self._key_trusted = True
             _log("key derived from %s (%s); verifier stored"
                  % (NV_PASSWORD, _mask(password)))
             return True
-        _log("WARN: neither %s nor %s in media encryption data; using empty-password key"
+        # Empty or missing password: the key stays usable for the LOAD/decrypt path but is
+        # NOT trusted for encrypt() -- the fail-closed gate refuses to save with it.
+        _log("WARN: neither %s nor a non-empty %s in media encryption data; "
+             "using empty-password key (decrypt-only, encrypt() will refuse)"
              % (NV_KEY, NV_PASSWORD))
         self._key = derive_key("")
+        self._key_trusted = False
         return True
 
     def encrypt(self, x_input_stream):
+        # Fail-closed gate: never mint "fake ciphertext" from an empty/demo key.  Only a
+        # key sourced from CipherBoxKey, a non-empty Password, or a verifier-verified
+        # generateEncryptionKey() may encrypt; anything else refuses the save outright.
+        if not self._key_trusted or self._key is None:
+            _log("encrypt(): REFUSED (fail-closed) - key not from a trusted source "
+                 "(trusted=%s, present=%s)" % (self._key_trusted, self._key is not None))
+            raise RuntimeError(
+                "CipherBox fail-closed: no trusted key (CipherBoxKey / non-empty Password / "
+                "verified password required); refusing to save fake ciphertext / "
+                "\u7f3a\u5c11\u53ef\u4fe1\u5bc6\u94a5\uff0c\u62d2\u7edd\u4ea7\u51fa\u4f2a\u5bc6\u6587"
+            )
         plain = _read_all(x_input_stream)
         _log("encrypt(): plaintext %d bytes, key=%s" % (len(plain), self._describe_key()))
 
@@ -743,6 +550,7 @@ class CipherBoxDataSpace(unohelper.Base, XServiceInfo, XInitialization, XPackage
             return False
         self._key = derive_key(password)
         self._key_verified = True
+        self._key_trusted = True
         return True
 
     def checkDataIntegrity(self):

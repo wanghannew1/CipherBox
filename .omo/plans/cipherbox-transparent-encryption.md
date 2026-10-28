@@ -142,7 +142,7 @@
 
 ### Wave 2 — 客户端 Agent（Python，Windows）
 
-- [ ] 10. Agent 侧 .cbx 容器解析与独立加解密模块（复用纯密码学函数 + encrypt() 加 fail-closed 门禁）
+- [x] 10. Agent 侧 .cbx 容器解析与独立加解密模块（复用纯密码学函数 + encrypt() 加 fail-closed 门禁）（已实现：cipherbox_crypto.py 抽离无 uno 依赖；agent/container.py olefile 解析 + verifier 试探 + 旧版逐版本解密；encrypt() fail-closed 门禁；21/21 pytest + 19/19 门禁测试绿；已声明残余：CBC 无 MAC 的中游篡改不可检测，与引擎一致）
   - References: `lo-encryption-demo/src/cipherbox.py` 的 `aes_cbc`/`derive_key`/`derive_verifier`/`verifier_matches`/`_parse_verifier`/`_i64`/`_pkcs7_*`（纯函数，L240-291、L299-379 等）**及 `aes_cbc` 的 CNG 依赖链 `_cbc_raw`/`_load_bcrypt`/`_as_pbuf`（L100-237，随 `aes_cbc` 一并抽离，否则 `cipherbox_crypto.py` 不可导入）**；`setupEncryption` 的空口令兜底（L645-647）与 `_require_key` 的 demo key 兜底（L769-773）。
   - Acceptance: ① 把上述纯密码学函数抽离到新模块 `lo-encryption-demo/src/cipherbox_crypto.py`（**无 `uno` 依赖**），`cipherbox.py` 改为从它 import（**只抽离不改加密算法，现有 LO 内引擎行为不变**）。② 新增 `agent/container.py`：用 `olefile`（只读 CFB）解析 `.cbx`，提取 `EncryptedPackage` 载荷与 `DataSpaceInfo` 的 verifier trailer；载荷按 `_i64(len) + iv + cipher` 用 `aes_cbc(derive_key(口令), iv, ct)` 解密；verifier 试探复用 `_parse_verifier` + `verifier_matches`，**verifier 缺失（旧文件向后兼容）时按"未知"处理，对全部缓存版本逐个尝试解密，成功判据 = padding 合法 且 明文以 `PK\x03\x04` 开头（OOXML 恒为 ZIP），不满足则继续下一版本直至穷尽报错**。③ **给 `cipherbox.py` 的 `encrypt()` 加 fail-closed 门禁**：仅当 key 来源于 `NV_KEY`、**非空** `Password`、或经 verifier 验证的 `generateEncryptionKey` 路径时才允许加密，空/缺失口令一律抛错拒绝保存（堵"伪密文"）；load/decrypt 路径不改。
   - QA happy: 用 UNO 加密出的真实 `.cbx`（todo 2 产物）作为输入，`agent/container.py` 解密结果与原文逐字节一致；verifier 试探能对错口令返回 False、对正确口令返回 True；**无口令调 `encrypt()` → 抛错而非产出空口令密文**。
