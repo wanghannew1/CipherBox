@@ -1,0 +1,41 @@
+﻿===== spike_reencrypt run 1 (12:07:42) — WATCHDOG KILL DIAGNOSIS =====
+
+Runner: bundled python, TMP=TEMP=S:\.cipherbox-tmp\service, whole-script watchdog 90s.
+Result: WATCHDOG killed the client at 90s. No stdout captured (block-buffered pipe, lost on kill).
+
+Side-effect reconstruction (products + engine log tail, captured right after the kill):
+
+OUT_DIR S:\.cipherbox-tmp\spike-todo-02\20261009-120742:
+  plain.docx 5116B, plain.xlsx 5664B, plain.pptx 8430B
+  reencrypted.docx 10240B, reencrypted.xlsx 10752B, reencrypted.pptx 12800B
+  -> Part A completed for ALL 3 formats (plaintext + encrypted products all written).
+
+Engine log tail (S:\.cipherbox-tmp\service\cipherbox-encryption.log):
+  ... pptx save: encrypt() plaintext 8110 -> 5 streams, EncryptedPackage 8136
+  createInstance() + readEncryptionInfo(verifier recovered) + generateEncryptionKey(len=28 correct, accepted)
+  + generateEncryptionKey(len=23 wrong -> verifier mismatch) + decrypt(8112 -> 8110)
+  -> MY pptx engine roundtrip COMPLETED (all 3 roundtrips done; docx/xlsx scrolled above).
+  createInstanceWithArguments(0 args) + readEncryptionInfo + generateEncryptionKey(len=15 VelvetSweatshop -> mismatch)
+  + generateEncryptionKey(len=23 wrong -> mismatch)          <- oox wrong-pw load #1 (docx)
+  createInstanceWithArguments(0 args) + readEncryptionInfo + generateEncryptionKey(len=15 -> mismatch)
+  + generateEncryptionKey(len=23 -> mismatch)                <- oox wrong-pw load #2 (xlsx)
+  (no further lines)
+
+Interpretation:
+- Baseline (todo-01, engine-log-baseline-evidence.txt) shows ONE engine sequence per wrong-pw load,
+  so the two sequences above = TWO wrong-pw loadComponentFromURL calls = docx's call RETURNED
+  (presumably raised, as in the todo-01 baseline) and the script advanced to xlsx.
+- The xlsx wrong-pw loadComponentFromURL never returned within the remaining ~75s: after the
+  engine rejects both "VelvetSweatshop" and the supplied wrong password, oox's
+  requestAndVerifyDocPassword proceeds to an interactive password request, which on headless
+  LO 26.6/26.8 can block indefinitely instead of aborting -> the call hangs (client-side wait;
+  the service main loop stayed responsive and no components were left open: post-kill probe
+  showed RESOLVE OK + 0 open components + service PIDs 19336/16524 unchanged).
+- Conclusion: wrong-password reload on LO 26.8 headless is FLAKY in form: raises
+  "Unsupported URL ... type detection aborted" (todo-01 baseline; this run's docx) OR blocks
+  indefinitely (this run's xlsx). Both are "document not opened"; a spike must isolate each
+  load in a kill-able child process to record this honestly -> spike_wrongpassword.py.
+
+Action: Part C moved to sibling spike_wrongpassword.py with per-load child isolation
+(sys.executable re-invocation --wrongpw <path>, 20s hard kill cap); spike_reencrypt.py keeps
+Part A + the conclusions section. Re-run with python -u so progress survives watchdog kills.

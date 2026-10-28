@@ -1,0 +1,1 @@
+﻿[11:57:45] START todo-4 spike -- plan todo4 contract read (lines 99-104), engine registration pattern (start_soffice.ps1) + test patterns (test_e2e/test_documents/test_password_verify) read -- launching

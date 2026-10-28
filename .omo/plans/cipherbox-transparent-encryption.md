@@ -82,7 +82,7 @@
   - QA failure: 停掉 soffice → `check_service.py` 超时/`could not connect`；**且在员工正常启动 LO 时，服务进程仍存活不退出**（服务 profile 隔离生效）。
   - Commit: `git init`（若用户同意）后首个提交：补齐 `start_soffice.ps1` 与 `check_service.py` 基线。
 
-- [ ] 2. 验证"UNO 重加密已有明文文件"可行 + 实测二进制格式边界
+- [x] 2. 验证"UNO 重加密已有明文文件"可行 + 实测二进制格式边界（实测修订：LO 26.8 重载路径结构性不可用→改用引擎 API 级回环验证；doc/xls/ppt 实际走自定义引擎（原判断证伪）；错口令=快速抛异常；结论见 artifacts/todo-02/spike-conclusions.md）
   - References: `lo-encryption-demo/test/test_documents.py`（`storeToURL` + `EncryptionData` 触发加密；L33-35 `use_hook=False` 表明 doc/xls/ppt 走内置加密）、`test/probe_encrypt.py`（媒体描述符触发矩阵）。
   - Acceptance: 写脚本：`loadComponentFromURL(明文.docx)` → `storeToURL(目标, [FilterName, Password, EncryptionData{CryptoType:"CipherBoxDataSpace", Password:主密钥}])` → 生成 CFB 容器（OLE_MAGIC `\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1`）含 `EncryptedPackage` 与 `CipherBoxDataSpace` 标记（**引擎实际返回 5 流 DataSpaceMap/Version/DataSpaceInfo/TransformInfo/EncryptedPackage，无 `EncryptionInfo` 流——那是 LO 内置 agile 加密的流名，切勿断言它**）；用 `Password:主密钥` 重新 `loadComponentFromURL` 能读回原文。**并对 .doc/.xls/.ppt 实测：带 `EncryptionData{CryptoType}` 保存后，产物是否含 `CipherBoxDataSpace` 标记，据此固化格式边界结论。**
   - QA happy: docx/xlsx/pptx 三格式重加密+重载，内容标记（`CipherBox round trip marker 4711`）一致；doc/xls/ppt 输出明确结论（走自定义引擎 or 内置加密）。

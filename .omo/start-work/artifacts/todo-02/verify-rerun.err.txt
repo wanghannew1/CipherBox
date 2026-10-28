@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "C:\code\cipherbox\lo-encryption-demo\test\spike_reencrypt.py", line 271, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "C:\code\cipherbox\lo-encryption-demo\test\spike_reencrypt.py", line 250, in main
+    os.makedirs(out_dir, exist_ok=True)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen os>", line 218, in makedirs
+  File "<frozen os>", line 218, in makedirs
+  File "<frozen os>", line 218, in makedirs
+  File "<frozen os>", line 228, in makedirs
+FileNotFoundError: [WinError 3] 系统找不到指定的路径。: 'S:\\'

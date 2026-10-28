@@ -1,0 +1,42 @@
+# todo-02 adversarial classes — observable results
+
+- misleading_success_output: COVERED. The re-encrypt round trip compares REAL
+  decrypted content (engine decrypt -> zipfile-decompressed entry scan for the
+  marker bytes), not just exit 0; the format-boundary conclusion is backed by
+  real byte inspection (OLE magic, EncryptedPackage UTF-16LE, CipherBoxDataSpace
+  marks, EncryptionInfo absent, engine log delta) PLUS an engine-decrypt round
+  trip (inner binary office file recovered at exact sizes 9216/5632/460800 B
+  with the marker) — not assumption; the wrong-password record captures the
+  actual exception class and message (IllegalArgumentException "type detection
+  aborted"), not a bare "rejected"; the reload root-cause evidence separates
+  "engine chain ran to checkDataIntegrity=True" (log) from "loader saw raw CFB
+  bytes" (content head printed) so neither can masquerade as the other. The
+  run-1 "hang" was itself diagnosed to a runner artifact (.NET pipe deadlock)
+  instead of being reported as a spike verdict — see
+  spike-reencrypt-run1-hang-diagnosis.txt.
+- stale_state: COVERED. Fresh timestamped OUT_DIR per run
+  (S:\.cipherbox-tmp\spike-todo-02\<ts>), fresh factory docs per format per
+  run; re-run consistency spot check: spike_reencrypt.py and
+  spike_format_boundary.py re-run -> identical verdicts (0 FAIL lines, same
+  RESULT, 1-2 s, no watchdog). Transcripts: rerun-*.txt.
+- hung_or_long_commands: COVERED. Every UNO script ran as a child process with a
+  hard kill cap (60-90 s whole-script; spike_wrongpassword per-load children
+  20 s). The three observed "hangs" were root-caused to the .NET
+  redirected-pipe deadlock (output ~4.6 KB > 4 KB anonymous-pipe buffer,
+  WaitForExit before read) and eliminated by the pipe-free runner
+  (Start-Process -RedirectStandardOutput <file>); nothing left hung; the
+  shared service was never killed/restarted (PIDs 19336/16524 throughout,
+  0 open components after every run).
+- flaky_tests: COVERED. No retries needed for the final green runs; the apparent
+  raise-vs-hang flakiness was the pipe-deadlock misdiagnosis, resolved; the
+  wrongpassword spike keeps per-load child isolation (20 s cap) so any future
+  block is a bounded, recordable outcome; all four spikes green on the first
+  post-fix run and consistent on re-run.
+- prompt_injection: N/A — no untrusted content processed; all inputs are
+  self-generated test documents and LO/UNO APIs.
+- cancel_resume: N/A — single-session linear execution; no cancellation or
+  resume occurred.
+- dirty_worktree: N/A — HEAD 7fc5187 verified clean before my changes; after
+  them only the 4 new test files (committed) and .omo artifacts (never
+  committed) exist.
+- repeated_interruptions: N/A — no interruptions occurred.

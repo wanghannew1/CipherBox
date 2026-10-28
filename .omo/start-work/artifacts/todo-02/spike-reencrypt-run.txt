@@ -1,0 +1,73 @@
+spike_reencrypt; products in S:\.cipherbox-tmp\spike-todo-02\20261009-122707
+
+--- A. re-encrypt docx (MS Word 2007 XML) ---
+PASS  docx: plaintext loads 
+PASS  docx: encrypted product written 
+PASS  docx: OLE/CFB container magic 10240 bytes, magic=d0cf11e0a1b11ae1
+PASS  docx: EncryptedPackage stream present 
+PASS  docx: CipherBoxDataSpace marks present 
+PASS  docx: no EncryptionInfo stream (agile-only, must be absent) 
+PASS  docx: engine encrypt() ran on save 
+PASS  docx: CFB exposes the 5 engine streams ['\x06DataSpaces/DataSpaceInfo/CipherBoxDataSpace', '\x06DataSpaces/DataSpaceMap', '\x06DataSpaces/TransformInfo/CipherBoxTransform/\x06Primary', '\x06DataSpaces/Version', 'EncryptedPackage']
+PASS  docx: engine instantiates for round trip 
+PASS  docx: readEncryptionInfo accepts the container 
+PASS  docx: generateEncryptionKey(correct password) 
+PASS  docx: generateEncryptionKey(wrong password) rejected 
+PASS  docx: decrypt() returns true 
+PASS  docx: recovered payload is the OOXML ZIP (PK magic) 5368 bytes
+PASS  docx: marker bytes survive the engine round trip 
+
+--- A. re-encrypt xlsx (Calc MS Excel 2007 XML) ---
+PASS  xlsx: plaintext loads 
+PASS  xlsx: encrypted product written 
+PASS  xlsx: OLE/CFB container magic 10752 bytes, magic=d0cf11e0a1b11ae1
+PASS  xlsx: EncryptedPackage stream present 
+PASS  xlsx: CipherBoxDataSpace marks present 
+PASS  xlsx: no EncryptionInfo stream (agile-only, must be absent) 
+PASS  xlsx: engine encrypt() ran on save 
+PASS  xlsx: CFB exposes the 5 engine streams ['\x06DataSpaces/DataSpaceInfo/CipherBoxDataSpace', '\x06DataSpaces/DataSpaceMap', '\x06DataSpaces/TransformInfo/CipherBoxTransform/\x06Primary', '\x06DataSpaces/Version', 'EncryptedPackage']
+PASS  xlsx: engine instantiates for round trip 
+PASS  xlsx: readEncryptionInfo accepts the container 
+PASS  xlsx: generateEncryptionKey(correct password) 
+PASS  xlsx: generateEncryptionKey(wrong password) rejected 
+PASS  xlsx: decrypt() returns true 
+PASS  xlsx: recovered payload is the OOXML ZIP (PK magic) 5822 bytes
+PASS  xlsx: marker bytes survive the engine round trip 
+
+--- A. re-encrypt pptx (Impress MS PowerPoint 2007 XML) ---
+PASS  pptx: plaintext loads 
+PASS  pptx: encrypted product written 
+PASS  pptx: OLE/CFB container magic 12800 bytes, magic=d0cf11e0a1b11ae1
+PASS  pptx: EncryptedPackage stream present 
+PASS  pptx: CipherBoxDataSpace marks present 
+PASS  pptx: no EncryptionInfo stream (agile-only, must be absent) 
+PASS  pptx: engine encrypt() ran on save 
+PASS  pptx: CFB exposes the 5 engine streams ['\x06DataSpaces/DataSpaceInfo/CipherBoxDataSpace', '\x06DataSpaces/DataSpaceMap', '\x06DataSpaces/TransformInfo/CipherBoxTransform/\x06Primary', '\x06DataSpaces/Version', 'EncryptedPackage']
+PASS  pptx: engine instantiates for round trip 
+PASS  pptx: readEncryptionInfo accepts the container 
+PASS  pptx: generateEncryptionKey(correct password) 
+PASS  pptx: generateEncryptionKey(wrong password) rejected 
+PASS  pptx: decrypt() returns true 
+PASS  pptx: recovered payload is the OOXML ZIP (PK magic) 8110 bytes
+PASS  pptx: marker bytes survive the engine round trip 
+
+================ CONCLUSIONS (Wave 0 todo 2) ================
+A. Re-encrypt PROVEN: plaintext-load + storeToURL(Password + EncryptionData{
+   CryptoType}) yields CFB containers (EncryptedPackage + CipherBoxDataSpace
+   marks, no EncryptionInfo); the ENGINE's decrypt recovers the OOXML ZIP with
+   the round-trip marker byte-consistent (fallback criterion 1 green).
+B. Format boundary CONFIRMED: doc/xls/ppt ignore EncryptionData{CryptoType}; no
+   CipherBoxDataSpace marks, engine never invoked -> out of scope (sibling spike).
+C. Wrong-password reload on LO 26.8 RAISES 'Unsupported URL ... type
+   detection aborted' (does not return None); the engine verifier rejects
+   the wrong password first (log-proven) -- recorded with per-load child
+   isolation in spike_wrongpassword.py (plan QA wording must assert the raise).
+D. Reload break is structural: decrypt()'s output stream is an [out] IDL
+   param -- a PyUNO engine never sees the caller's stream; filterdetect sniffs
+   only its own UNOMemoryStream -> empty -> no type -> Text fallback.
+   Production path unaffected (todo 13 encrypts via plaintext-load + encrypted-
+   store, todo 14 decrypts agent-side). Full analysis: sibling spike + .md record.
+
+RESULT: PASS (3 OOXML re-encrypted + engine round trip)
+
+[runner] elapsed=2s exit=

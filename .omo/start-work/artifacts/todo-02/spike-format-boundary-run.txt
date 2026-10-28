@@ -1,0 +1,56 @@
+spike_format_boundary; products in S:\.cipherbox-tmp\spike-todo-02\20261009-122940
+
+--- B. format boundary doc (MS Word 97) + EncryptionData{CryptoType} ---
+PASS  doc: plaintext written 
+PASS  doc: product written 
+  doc: 14336 bytes, OLE magic=True, EncryptedPackage=True, CipherBoxDataSpace marks=True, EncryptionInfo=False, engine encrypt() ran=True
+PASS  doc: custom engine IS routed via EncryptionData{CryptoType} (plan's expected boundary falsified) 
+PASS  doc: CFB exposes the 5 engine streams ['\x06DataSpaces/DataSpaceInfo/CipherBoxDataSpace', '\x06DataSpaces/DataSpaceMap', '\x06DataSpaces/TransformInfo/CipherBoxTransform/\x06Primary', '\x06DataSpaces/Version', 'EncryptedPackage']
+PASS  doc: engine instantiates for round trip 
+PASS  doc: readEncryptionInfo accepts the container 
+PASS  doc: generateEncryptionKey(correct password) 
+PASS  doc: decrypt() returns true 
+PASS  doc: recovered payload is the inner binary office file (OLE magic) 9216 bytes
+PASS  doc: marker bytes survive the engine round trip 
+
+--- B. format boundary xls (MS Excel 97) + EncryptionData{CryptoType} ---
+PASS  xls: plaintext written 
+PASS  xls: product written 
+  xls: 10752 bytes, OLE magic=True, EncryptedPackage=True, CipherBoxDataSpace marks=True, EncryptionInfo=False, engine encrypt() ran=True
+PASS  xls: custom engine IS routed via EncryptionData{CryptoType} (plan's expected boundary falsified) 
+PASS  xls: CFB exposes the 5 engine streams ['\x06DataSpaces/DataSpaceInfo/CipherBoxDataSpace', '\x06DataSpaces/DataSpaceMap', '\x06DataSpaces/TransformInfo/CipherBoxTransform/\x06Primary', '\x06DataSpaces/Version', 'EncryptedPackage']
+PASS  xls: engine instantiates for round trip 
+PASS  xls: readEncryptionInfo accepts the container 
+PASS  xls: generateEncryptionKey(correct password) 
+PASS  xls: decrypt() returns true 
+PASS  xls: recovered payload is the inner binary office file (OLE magic) 5632 bytes
+PASS  xls: marker bytes survive the engine round trip 
+
+--- B. format boundary ppt (MS PowerPoint 97) + EncryptionData{CryptoType} ---
+PASS  ppt: plaintext written 
+PASS  ppt: product written 
+  ppt: 469504 bytes, OLE magic=True, EncryptedPackage=True, CipherBoxDataSpace marks=True, EncryptionInfo=False, engine encrypt() ran=True
+PASS  ppt: custom engine IS routed via EncryptionData{CryptoType} (plan's expected boundary falsified) 
+PASS  ppt: CFB exposes the 5 engine streams ['\x06DataSpaces/DataSpaceInfo/CipherBoxDataSpace', '\x06DataSpaces/DataSpaceMap', '\x06DataSpaces/TransformInfo/CipherBoxTransform/\x06Primary', '\x06DataSpaces/Version', 'EncryptedPackage']
+PASS  ppt: engine instantiates for round trip 
+PASS  ppt: readEncryptionInfo accepts the container 
+PASS  ppt: generateEncryptionKey(correct password) 
+PASS  ppt: decrypt() returns true 
+PASS  ppt: recovered payload is the inner binary office file (OLE magic) 460800 bytes
+PASS  ppt: marker bytes survive the engine round trip 
+
+CONCLUSION: the plan's expected binary-format boundary is FALSIFIED:
+doc/xls/ppt with EncryptionData{CryptoType} DO route the custom
+CipherBoxDataSpace engine (CipherBox CFB products, engine encrypt() ran,
+engine-decrypt round trip recovers the inner binary office file with the
+marker). The storage-level encryption layer is format-agnostic; the
+use_hook=False premise came from the Password-only path (built-in crypto),
+not from the EncryptionData path. The real boundary is the RELOAD path,
+broken for ALL custom-dataspace containers regardless of format (see
+spike_reload_rootcause.py) -- which the production path never uses.
+The doc/xls/ppt out-of-scope decision rests on a falsified technical
+premise and needs the orchestrator's re-decision with this evidence.
+
+RESULT: PASS (doc/xls/ppt DO route the custom engine; boundary premise falsified with byte + round-trip evidence)
+
+[runner] elapsed=1s exit=see RESULT line

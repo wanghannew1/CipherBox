@@ -1,0 +1,67 @@
+spike_reload_rootcause; products in S:\.cipherbox-tmp\spike-todo-02\20261009-123543
+
+--- (a) agile isolation: Password only, no EncryptionData ---
+  agile product: 8192 bytes, OLE magic=True, EncryptionInfo=True, EncryptedPackage=True, CipherBoxDataSpace marks=False, engine ran=False
+PASS  agile: built-in agile container (EncryptionInfo, no CipherBox marks) 
+PASS  agile: custom engine never invoked (log silent) 
+PASS  agile: reloads with the password 
+PASS  agile: content survives the reload 'CipherBox round trip marker 4711'
+
+--- (b) custom divergence probes (EncryptionData{CryptoType}) ---
+PASS  custom: CipherBox container (marks, no EncryptionInfo) 9728 bytes
+  TypeDetection.queryTypeByDescriptor(correct password) -> typename=''
+PASS  custom: type query does not even engage the engine (no log delta; the empty type needs no crypto attempt) 
+PASS  custom: yet the detected type is EMPTY ''
+PASS  custom: load returns a document (Text-filter fallback, not None) 
+  loaded content head: 'ĐĎ#ŕˇ±#á################;###ţ˙\t#########'
+PASS  custom: loaded content is the RAW CFB bytes, marker absent (loader never saw the decrypted bytes) 
+PASS  custom: engine chain ran again inside the load (log) 
+
+========== ROOT CAUSE (fixed from LO 26.8 oox source) ==========
+(a) GENERAL encrypted reload WORKS on LO 26.8: the Password-only
+    (agile) docx reloads with content intact -- the break is
+    specific to custom-dataspace containers, not to encrypted
+    reload in general.
+(b) The divergence point is NOT the crypto and NOT what
+    createEncryptionData returns (oox's PasswordVerifier only
+    checks hasElements(); our [CryptoType, CipherBoxKey] satisfies
+    it).  The external TypeDetection query returns '' WITHOUT
+    engaging the engine at all (zero log lines -- no crypto attempt
+    happens in that query); the LOAD path DOES engage the engine
+    completely (readEncryptionInfo -> generateEncryptionKey ->
+    createEncryptionData -> decrypt -> checkDataIntegrity=True,
+    log-proven) and still falls back to Text with the raw CFB bytes
+    as content.  The decrypted bytes never reach oox:
+    oox/source/crypto/DocumentDecryption.cxx decrypt() pre-loads its
+    caller's UNOMemoryStream output stream into the [out] parameter
+    variable, and oox/source/core/filterdetect.cxx
+    extractUnencryptedPackage() then sniffs THAT SAME UNOMemoryStream
+    (lclIsZipPackage on xTempStream->getInputStream()).
+    XPackageEncryption::decrypt()'s second parameter is [out] in the
+    IDL, so PyUNO delivers None to the Python engine -- the caller's
+    stream can never be written from Python.  The C++ built-in
+    engines (StrongEncryptionDataSpace.cxx) get away with it because
+    an in-process C++ call passes a reference whose current value IS
+    the caller's pre-loaded stream, and they write into it
+    (BinaryXOutputStream aOutputStream(rxOutputStream, true)).  A
+    Python engine's only channel -- returning (True, own_stream) --
+    replaces the caller's variable with a DIFFERENT stream object
+    that filterdetect never reads.  Result: empty UNOMemoryStream ->
+    lclIsZipPackage false -> extractUnencryptedPackage null ->
+    detect() throws UNO_SET_THROW -> catch without ABORTED -> empty
+    filter name -> Text fallback.  Structural since the API's
+    introduction (LO 7.0), not a 26.8 regression, not fixable from
+    Python.
+(c) Options: (1) acceptance adjustment -- production never does
+    LO-side custom-engine reload (todo 13 encrypts via plaintext-
+    load + encrypted-store, PROVEN; todo 14 decrypts agent-side via
+    container.py) -- record the boundary, no engine change.  (2)
+    engine-side adaptation is IMPOSSIBLE from pure Python via the
+    decrypt [out] param (no channel to the caller's stream); only
+    LO C++ changes (filterdetect using the returned out-param stream)
+    or an OLE-storage-level workaround could fix it.  Full record:
+    spike-conclusions.md (todo-02 artifacts).
+
+RESULT: PASS (agile isolation + custom divergence probes recorded)
+
+[runner] elapsed=2s exit=see RESULT line
