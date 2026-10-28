@@ -1,7 +1,8 @@
-"""Employee token lifecycle: issue / verify / renew / revoke.
+"""Employee token lifecycle: issue / verify / renew / revoke (plan todo 5).
 
-Design rules (plan todo 5):
-- Only the SHA-256 hex digest of a token is ever stored (`employees.token_hash`).
+Design rules:
+- Only the SHA-256 hex digest of a token is ever stored (`employees.token_hash`)
+  — `hashlib.sha256`, same dependency family as `lo-encryption-demo/src/cipherbox.py`.
 - TTL is 90 days from `issued_at`.
 - Renewal slides `expires_at` to now + TTL and is only valid for a
   non-expired, non-revoked token.
@@ -18,15 +19,14 @@ import hashlib
 import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
-from typing import Literal
 
-from . import db
+from . import database
+from .config import TOKEN_TTL_DAYS
+from .models import EmployeeToken, Level
 
-Level = Literal["admin", "employee"]
+__all__ = ["Level", "TOKEN_TTL", "hash_token", "issue_token", "verify_token", "renew_token", "revoke_employee"]
 
-TOKEN_TTL = timedelta(days=90)
-
-_TS_FMT = "%Y-%m-%dT%H:%M:%S.%f%z"
+TOKEN_TTL = timedelta(days=TOKEN_TTL_DAYS)
 
 
 def _iso(ts: datetime) -> str:
@@ -68,7 +68,7 @@ def verify_token(
     token: str,
     *,
     now: datetime | None = None,
-) -> db.EmployeeToken | None:
+) -> EmployeeToken | None:
     """Resolve a plaintext token to its record, or None.
 
     Unknown, revoked, and expired tokens all collapse to None so callers
@@ -77,7 +77,7 @@ def verify_token(
     if not token:
         return None
     at = now if now is not None else _utcnow()
-    rec = db.get_by_hash(conn, hash_token(token))
+    rec = database.get_by_hash(conn, hash_token(token))
     if rec is None or rec.revoked:
         return None
     if datetime.fromisoformat(rec.expires_at) <= at:

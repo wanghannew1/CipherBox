@@ -6,18 +6,18 @@ client send one cleartext request carrying the Bearer token).
 
 Generate the self-signed CA + server certificate first:
 
-    powershell -ExecutionPolicy Bypass -File server\\scripts\\make_certs.ps1
+    server\\.venv\\Scripts\\python.exe deploy\\gen_certs.py
 
-Run (exact command; cert/key paths relative to repo root):
+Run (exact command; cert/key paths from server/config.py defaults):
 
     server\\.venv\\Scripts\\python.exe -m uvicorn server.app:create_app --factory ^
         --host 0.0.0.0 --port 8443 ^
         --ssl-certfile server\\certs\\server.crt --ssl-keyfile server\\certs\\server.key
 
 The SQLite path defaults to server/cipherbox.db and can be overridden with
-the CIPHERBOX_DB environment variable. Real TLS end-to-end verification is
-todo 9's integration test; this module only guarantees the app mounts
-behind TLS and never opens an HTTP port by itself.
+the CIPHERBOX_DB environment variable (see server/config.py for all knobs).
+Real TLS end-to-end verification is todo 9's integration test; this module
+only guarantees the app mounts behind TLS and never opens an HTTP port.
 
 Auth contract (todo 5):
 - GET /health is unauthenticated.
@@ -27,22 +27,23 @@ Auth contract (todo 5):
 - POST /token/renew (valid token) slides expires_at by +90 days.
 - POST /admin/revoke (admin level only) revokes all tokens of an employee;
   non-admin callers get 403.
+- GET /key and POST /events both pass through the same revocation check
+  (placeholder bodies until todo 6 / todo 7).
 """
 
 from __future__ import annotations
 
-import os
 import sqlite3
 from datetime import timezone
 from pathlib import Path
-from typing import Annotated, Iterator
+from typing import Annotated, Any, Iterator
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from . import auth, db
-
-DEFAULT_DB_PATH = Path(__file__).resolve().parent / "cipherbox.db"
+from . import audit, auth, database, key_manager
+from .config import ServerConfig, load_config
+from .models import EmployeeToken
 
 _UNAUTHORIZED_DETAIL = "invalid or missing credentials"
 
@@ -57,7 +58,7 @@ def _unauthorized() -> HTTPException:
 
 
 def get_db(request: Request) -> Iterator[sqlite3.Connection]:
-    conn = db.connect(request.app.state.db_path)
+    conn = database.connect(request.app.state.db_path)
     try:
         yield conn
     finally:
@@ -81,7 +82,7 @@ def bearer_token(request: Request) -> str:
 def current_employee(
     token: Annotated[str, Depends(bearer_token)],
     conn: DbConn,
-) -> db.EmployeeToken:
+) -> EmployeeToken:
     rec = auth.verify_token(conn, token)
     if rec is None:
         raise _unauthorized()
@@ -89,38 +90,56 @@ def current_employee(
 
 
 def require_admin(
-    rec: Annotated[db.EmployeeToken, Depends(current_employee)],
-) -> db.EmployeeToken:
+    rec: Annotated[EmployeeToken, Depends(current_employee)],
+) -> EmployeeToken:
     if rec.level != "admin":
         raise HTTPException(status_code=403, detail="admin privileges required")
     return rec
 
 
-CurrentEmployee = Annotated[db.EmployeeToken, Depends(current_employee)]
-AdminEmployee = Annotated[db.EmployeeToken, Depends(require_admin)]
+CurrentEmployee = Annotated[EmployeeToken, Depends(current_employee)]
+AdminEmployee = Annotated[EmployeeToken, Depends(require_admin)]
 
 
 class RevokeRequest(BaseModel):
     employee: str = Field(min_length=1, max_length=256)
 
 
-def create_app(db_path: str | Path | None = None) -> FastAPI:
-    """Application factory; `uvicorn server.app:create_app --factory`."""
-    if db_path is None:
-        db_path = os.environ.get("CIPHERBOX_DB", str(DEFAULT_DB_PATH))
-    db.init_schema(db_path)
+def create_app(
+    config: ServerConfig | None = None,
+    db_path: str | Path | None = None,
+) -> FastAPI:
+    """Application factory; `uvicorn server.app:create_app --factory`.
+
+    `db_path` overrides config.db_path (tests inject a tmp_path SQLite file).
+    """
+    if config is None:
+        config = load_config(db_path=db_path)
+    elif db_path is not None:
+        config = load_config(host=config.host, port=config.port, db_path=db_path, cert_dir=config.cert_dir)
+    database.init_schema(config.db_path)
 
     app = FastAPI(title="cipherbox-server")
-    app.state.db_path = str(db_path)
+    app.state.config = config
+    app.state.db_path = str(config.db_path)
 
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/key")
-    def get_key(rec: CurrentEmployee) -> dict[str, object]:
+    def get_key(rec: CurrentEmployee, conn: DbConn) -> dict[str, Any]:
         # Placeholder envelope only; todo 6 implements real key issuance.
-        return {"versions": [], "current": None}
+        return key_manager.get_version_set(conn)
+
+    @app.post("/events")
+    def post_event(
+        rec: CurrentEmployee,
+        conn: DbConn,
+        payload: dict[str, Any] = Body(default_factory=dict),
+    ) -> dict[str, Any]:
+        # Auth-gated placeholder; todo 7 implements real persistence + 422s.
+        return audit.record_event(conn, rec, payload)
 
     @app.post("/token/renew")
     def renew(rec: CurrentEmployee, conn: DbConn) -> dict[str, str]:

@@ -20,8 +20,10 @@ from typing import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from server import auth, db
+from server import auth, database
 from server.app import _UNAUTHORIZED_DETAIL, create_app
+from server.config import DEFAULT_PORT, TOKEN_TTL_DAYS, load_config
+from server.models import EmployeeToken
 
 SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 NOW = datetime.now(timezone.utc)
@@ -34,13 +36,13 @@ def db_path(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def client(db_path: Path) -> TestClient:
-    return TestClient(create_app(db_path))
+    return TestClient(create_app(db_path=db_path))
 
 
 @pytest.fixture()
 def conn(db_path: Path) -> Iterator[sqlite3.Connection]:
-    db.init_schema(db_path)  # direct-DB tests must not depend on the client fixture
-    c = db.connect(db_path)
+    database.init_schema(db_path)  # direct-DB tests must not depend on the client fixture
+    c = database.connect(db_path)
     yield c
     c.close()
 
@@ -51,10 +53,23 @@ def _issue(conn: sqlite3.Connection, employee: str = "emp-1",
     return auth.issue_token(conn, employee, level, now=NOW - age)
 
 
-def _stored(conn: sqlite3.Connection, token: str) -> db.EmployeeToken:
-    rec = db.get_by_hash(conn, auth.hash_token(token))
+def _stored(conn: sqlite3.Connection, token: str) -> EmployeeToken:
+    rec = database.get_by_hash(conn, auth.hash_token(token))
     assert rec is not None
     return rec
+
+
+# --- config -------------------------------------------------------------------
+
+def test_config_defaults() -> None:
+    cfg = load_config()
+    assert cfg.port == 8443  # HTTPS-only port per plan todo 5
+    assert DEFAULT_PORT == 8443
+    assert cfg.token_ttl_days == 90
+    assert TOKEN_TTL_DAYS == 90
+    assert cfg.ca_cert.name == "ca.crt"
+    assert cfg.server_cert.name == "server.crt"
+    assert cfg.server_key.name == "server.key"
 
 
 # --- health -----------------------------------------------------------------
@@ -103,6 +118,51 @@ def test_key_401_malformed_header(client: TestClient, header: str) -> None:
 def test_key_401_unknown_token(client: TestClient) -> None:
     resp = client.get(
         "/key", headers={"Authorization": f"Bearer {secrets.token_urlsafe(32)}"}
+    )
+    assert resp.status_code == 401
+    assert resp.json() == {"detail": _UNAUTHORIZED_DETAIL}
+
+
+# --- /events auth gate (placeholder until todo 7) ------------------------------
+
+def test_events_200_with_valid_token(client: TestClient, conn: sqlite3.Connection) -> None:
+    token = _issue(conn, employee="emp-events")
+    resp = client.post(
+        "/events",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"action": "encrypt", "file_hash": "0" * 64},
+    )
+    assert resp.status_code == 200
+    # Placeholder ack; employee resolved server-side from the token.
+    assert resp.json()["employee"] == "emp-events"
+
+
+def test_events_401_missing_and_unknown_token(client: TestClient) -> None:
+    resp = client.post("/events", json={})
+    assert resp.status_code == 401
+    assert resp.json() == {"detail": _UNAUTHORIZED_DETAIL}
+
+    resp = client.post(
+        "/events",
+        headers={"Authorization": f"Bearer {secrets.token_urlsafe(32)}"},
+        json={},
+    )
+    assert resp.status_code == 401
+    assert resp.json() == {"detail": _UNAUTHORIZED_DETAIL}
+
+
+def test_events_401_revoked_and_expired(client: TestClient, conn: sqlite3.Connection) -> None:
+    revoked_tok = _issue(conn, employee="emp-revoked")
+    assert auth.revoke_employee(conn, "emp-revoked") == 1
+    resp = client.post(
+        "/events", headers={"Authorization": f"Bearer {revoked_tok}"}, json={}
+    )
+    assert resp.status_code == 401
+    assert resp.json() == {"detail": _UNAUTHORIZED_DETAIL}
+
+    expired_tok = _issue(conn, age=timedelta(days=91))
+    resp = client.post(
+        "/events", headers={"Authorization": f"Bearer {expired_tok}"}, json={}
     )
     assert resp.status_code == 401
     assert resp.json() == {"detail": _UNAUTHORIZED_DETAIL}

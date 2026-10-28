@@ -1,19 +1,23 @@
-"""SQLite schema and connection helpers for the cipherbox server.
+"""SQLite connection and session management for the cipherbox server.
 
-Single table per plan todo 5:
+Schema (plan todo 5):
 
     employees(token_hash, employee, level, issued_at, expires_at, revoked)
 
-Only a SHA-256 hex digest of the bearer token is stored, never the
-plaintext token itself. `employee` is the employee identifier column;
-`level` distinguishes 'admin' from 'employee'.
+A fresh connection per request keeps usage thread-safe without
+check_same_thread hacks (FastAPI runs sync endpoints in a threadpool).
+`session()` is the unit-of-work context manager: commit on clean exit,
+rollback on exception, always close.
 """
 
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
+
+from .models import EmployeeToken
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS employees (
@@ -27,38 +31,25 @@ CREATE TABLE IF NOT EXISTS employees (
 """
 
 
-@dataclass(frozen=True)
-class EmployeeToken:
-    """Row shape of one issued employee token."""
-
-    token_hash: str
-    employee: str
-    level: str
-    issued_at: str
-    expires_at: str
-    revoked: bool
-
-    @staticmethod
-    def from_row(row: sqlite3.Row) -> "EmployeeToken":
-        return EmployeeToken(
-            token_hash=row["token_hash"],
-            employee=row["employee"],
-            level=row["level"],
-            issued_at=row["issued_at"],
-            expires_at=row["expires_at"],
-            revoked=bool(row["revoked"]),
-        )
-
-
 def connect(db_path: str | Path) -> sqlite3.Connection:
-    """Open a connection with row access by column name.
-
-    A fresh connection per request keeps usage thread-safe without
-    check_same_thread hacks (FastAPI runs sync endpoints in a threadpool).
-    """
+    """Open a connection with row access by column name."""
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     return conn
+
+
+@contextmanager
+def session(db_path: str | Path) -> Iterator[sqlite3.Connection]:
+    """Transactional session: commit on success, rollback on error, close always."""
+    conn = connect(db_path)
+    try:
+        yield conn
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def init_schema(db_path: str | Path) -> None:
@@ -66,15 +57,12 @@ def init_schema(db_path: str | Path) -> None:
     path = Path(db_path)
     if path.parent and not path.parent.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
-    conn = connect(path)
-    try:
+    with session(path) as conn:
         conn.executescript(SCHEMA)
-        conn.commit()
-    finally:
-        conn.close()
 
 
 def get_by_hash(conn: sqlite3.Connection, token_hash: str) -> EmployeeToken | None:
+    """Look up one employee token row by its SHA-256 hex digest."""
     row = conn.execute(
         "SELECT token_hash, employee, level, issued_at, expires_at, revoked"
         " FROM employees WHERE token_hash = ?",
