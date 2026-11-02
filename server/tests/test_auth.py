@@ -35,7 +35,15 @@ def db_path(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
-def client(db_path: Path) -> TestClient:
+def hmac_key_file(tmp_path: Path) -> Path:
+    p = tmp_path / "hmac.key"
+    p.write_bytes(b"\x01" * 32)  # 256-bit dev HMAC key
+    return p
+
+
+@pytest.fixture()
+def client(db_path: Path, hmac_key_file: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.setenv("CIPHERBOX_HMAC_KEY_FILE", str(hmac_key_file))
     return TestClient(create_app(db_path=db_path))
 
 

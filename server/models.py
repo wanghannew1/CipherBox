@@ -43,3 +43,51 @@ class EmployeeToken:
             expires_at=row["expires_at"],
             revoked=bool(row["revoked"]),
         )
+
+
+@dataclass(frozen=True)
+class KeyVersion:
+    """One master-key version row."""
+
+    version: int
+    key_hex: str
+    created_at: str
+
+    @staticmethod
+    def from_row(row: sqlite3.Row) -> "KeyVersion":
+        return KeyVersion(
+            version=row["version"],
+            key_hex=row["key_hex"],
+            created_at=row["created_at"],
+        )
+
+
+@dataclass(frozen=True)
+class AuditEvent:
+    """Row shape of one audit event."""
+
+    id: int
+    ts: str
+    employee: str
+    file_hash: str
+    action: str
+    key_version: int | None
+    machine: str | None
+    ok: bool
+    prev_hash: str
+    mac: str
+
+    @staticmethod
+    def from_row(row: sqlite3.Row) -> "AuditEvent":
+        return AuditEvent(
+            id=row["id"],
+            ts=row["ts"],
+            employee=row["employee"],
+            file_hash=row["file_hash"],
+            action=row["action"],
+            key_version=row["key_version"],
+            machine=row["machine"],
+            ok=bool(row["ok"]),
+            prev_hash=row["prev_hash"],
+            mac=row["mac"],
+        )
