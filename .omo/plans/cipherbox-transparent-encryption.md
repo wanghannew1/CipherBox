@@ -96,7 +96,7 @@
   - QA failure: 启动器被杀/崩溃 → 验证有清理路径（残留临时明文可被下次启动回收），无静默丢失；(b) 态确认转交发生、记录为需串行化的证据。
   - Commit: spike 脚本 + 关联注册脚本草稿；若此步失败，触发"B→A 回退"并在草稿记录切换点。
 
-- [ ] 4. 验证 XDispatchProviderInterceptor 拦截 SaveAs/ExportTo/Send 可行性（回退方案 A 的安全网 + 覆盖与新 frame 探测）
+- [x] 4. 验证 XDispatchProviderInterceptor 拦截 SaveAs/ExportTo/Send 可行性（回退方案 A 的安全网 + 覆盖与新 frame 探测）
   - References: LO `com.sun.star.frame.XDispatchProviderInterceptor`；`lo-encryption-demo/src/cipherbox.py`（服务注入方式）。
   - Acceptance: 写最小 spike：经 UNO 连接注册一个拦截器，拦截 `.uno:SaveAs` 时改写 media descriptor（注入 `EncryptionData{CryptoType:"CipherBoxDataSpace", Password:<测试口令>}`）并委托原 dispatch；验证保存产物是 CFB 密文且用该口令可解。**同时实测：`Window > New Window` 开第二 frame 后，从新 frame 执行 SaveAs 是否仍被拦截（若否，记录为"需 per-frame 注册"证据）；新 frame 的自动发现机制（轮询 `Desktop.Components` 差集 / GlobalEventBroadcaster `OnNewView` / 每 frame `COMPONENT_ATTACHED`）哪个可用；拦截器进程内对象回调 Agent 取钥/上报的反向 UNO 通道是否可行；`.uno:SaveACopy`（另存副本）是否可拦截；SaveAs 强制改写为 `.cbx` 后，紧接着 `.uno:Save` 是否仍携带 EncryptionData（若否则 `.cbx` 目标会被明文覆盖）**。同时探明：`.uno:ExportTo`/`.uno:ExportToPDF`/`.uno:ExportDirectToPDF`（PDF 导出）、**`.uno:Print`/`.uno:PrintDefault`（含 print-to-file/Print-to-PDF 变体）**、`.uno:SendMail`/`.uno:SendDocAsPDF` 等"发送"族 dispatch 是否可拦截、可否注入（预期：PDF/打印/发送无法用 EncryptionData 加密，只能放行+审计）；**`.uno:SaveAll` 的 frame/desktop 路由方式（决定 temp 文档逐文档判定放行的实现路径）**。
   - QA happy: 拦截 SaveAs 后产物为密文、可解；输出 ExportTo/SendMail 可拦截性结论；第二 frame 下 SaveAs 拦截结论。
@@ -119,21 +119,21 @@
   - QA failure: 非管理员 token 调 `/admin/rotate` → 403；未认证 → 401。
   - Commit: 密钥签发/轮换 + `server/tests/test_key.py`。
 
-- [ ] 7. 审计事件记录端点 + SQLite schema（employee 由 token 解析，file_hash=明文内容 sha256）
+- [x] 7. 审计事件记录端点 + SQLite schema（employee 由 token 解析，file_hash=明文内容 sha256）
   - References: `hashlib.sha256`（`cipherbox.py` 已依赖）；字段统一：`file_hash` = **明文内容** sha256（加密前原文），decrypt/export 事件同用明文 hash。
   - Acceptance: `POST /events`（认证后）落库 `events(id, ts, employee, file_hash, action, key_version, machine, ok, prev_hash, mac)`；**`employee` 由服务端从 Bearer token 解析（查 `employees` 表的 `employee` 列；请求体同名字段一律拒绝 422，杜绝冒名）**，`machine`/`ts` 客户端自报可接受；`GET /events`（管理员）分页查回，**支持按 `key_version`/`action`/`employee` 过滤参数**；**服务器不接收/不存储文件内容**（端点只收元数据 JSON）。
   - QA happy: 发一条 encrypt 事件 → DB 可查回字段一致（含 key_version），且 `employee` 与 token 所属员工一致（即使请求体伪造了不同 employee）；**按 key_version 过滤能正确筛出该事件**。
   - QA failure: 缺必填字段 → 422；未认证 → 401；超长/非法 hash → 422。
   - Commit: 审计事件端点 + schema + `server/tests/test_events.py`。
 
-- [ ] 8. 服务器单元测试（TDD 补齐覆盖）
+- [x] 8. 服务器单元测试（TDD 补齐覆盖）
   - References: 上面 5–7 的测试文件。
   - Acceptance: `pytest server/tests/` 全绿，覆盖 auth/key/events 三组 happy+failure 路径。
   - QA happy: `pytest -q` 退出码 0，报告测试数 > 15。
   - QA failure: 人为改坏一处（如错 token 校验）→ 对应测试红。
   - Commit: 测试补漏后的提交。
 
-- [ ] 9. 服务器集成测试（起真实进程打端点，HTTPS）
+- [x] 9. 服务器集成测试（起真实进程打端点，HTTPS）
   - References: FastAPI 应用入口 `server/app.py`。
   - Acceptance: 启动真实 uvicorn（HTTPS）→ 用 `requests`（verify=自签 CA）走完 `health→key→events→(admin)rotate→events` 全链路，DB 落库可查。
   - QA happy: 脚本断言每步 HTTP 状态码与返回体。
@@ -149,7 +149,7 @@
   - QA failure: 损坏的 `.cbx`（截断/错 magic）→ 抛明确错误而非静默返回空；错口令解密 → 抛"密钥错误"。
   - Commit: `lo-encryption-demo/src/cipherbox_crypto.py` + `agent/container.py` + `agent/tests/test_container.py`。
 
-- [ ] 11. Agent 密钥管理：取全量版本集 + DPAPI 本地缓存（含历史密钥集，加密前刷新）
+- [x] 11. Agent 密钥管理：取全量版本集 + DPAPI 本地缓存（含历史密钥集，加密前刷新）
   - References: Windows DPAPI 用 `ctypes` 调 `CryptProtectData`/`CryptUnprotectData`（与 `cipherbox.py` 现有 CNG `ctypes` 风格一致）。
   - Acceptance: Agent 启动 → `POST /key` 取**全量版本集** → DPAPI 加密写本地缓存（**统一位置 `%APPDATA%\CipherBox\keycache.dat`，放卷外以保证卷未挂载/离线可用**）；缓存**全量历史版本集**（version→口令），打开旧文件时用 todo 10 的 verifier 试探逐版本判定正确口令（纯 Python，不反复 UNO 加载）；**加密前若在线则先刷新版本集**；离线用缓存。
   - QA happy: 首次在线取版本集→缓存文件存在且非明文；断网重启→能用缓存解密文件；轮换后用旧口令打开旧 `.cbx` 成功（逐版本试探命中）；在线加密前版本集已刷新。
@@ -177,14 +177,14 @@
   - QA failure: 打开后不改直接关 → 不重加密（保持原密文）；**LO 崩溃 → Agent 经进程句柄/Job 通知即时检测退出，立即执行与正常 doc-close 相同收尾（temp hash 对比 orig_sha256→有改动则以当前主密钥重加密并上报 encrypt 事件→删 temp→删 session 记录→释放串行槽，不留孤儿到下次启动）**；**会话中途 kill Agent → decrypt 事件已落库/已入本地队列（解密有痕）**；**注入注册失败 → 文档绝不打开、临时明文已清、无受控 soffice 残留，且下一次受控打开可正常执行（fail-open 窗口关闭、无孤儿楔死）**。
   - Commit: `agent/opener.py` + `agent/tests/test_opener.py`。
 
-- [ ] 15. Agent 审计上报封装 + 机器标识
+- [x] 15. Agent 审计上报封装 + 机器标识
   - References: 服务器 `/events` 契约（todo 7）；机器标识用 `socket.gethostname()` 或 Windows `GetComputerNameEx`。
   - Acceptance: 统一的 `report(action, file_hash, key_version, ok)` 封装，含员工令牌、机器名、时间戳；**employee 由服务端从 token 解析（客户端不伪造）**；失败时本地暂存队列、联网后重放——**队列落 `%APPDATA%\CipherBox\audit-queue.json`（DPAPI 加密，含文件名/哈希元数据不得卷外明文）**；**设容量上限（如 10000 条），满时丢弃最旧条目，恢复联网后补报一条 `ok=false` 的元事件（记录"离线期溢出丢弃 N 条"）**。
   - QA happy: 上报成功落库字段一致。
   - QA failure: 服务器不可达 → 事件进本地队列不丢，恢复后重放成功。
   - Commit: `agent/audit.py` + `agent/tests/test_audit.py`。
 
-- [ ] 16. Agent 单测/集成测试
+- [x] 16. Agent 单测/集成测试
   - References: 10–15 的测试文件。
   - Acceptance: `pytest agent/tests/` 全绿（纯逻辑部分不依赖 soffice；依赖 soffice 的部分标记/跳过或走集成）。
   - QA happy: `pytest -q` 退出码 0。
@@ -260,14 +260,14 @@
   - QA failure: 任一环节失败 → 打印环节名 + 日志位置，退出码非 0。
   - Commit: `test/e2e_full.py`。
 
-- [ ] 26. 明文临时文件安全清理（覆盖卷外 TempFile 泄漏 + profile backup 目录 + 孤儿 GUI）
+- [x] 26. 明文临时文件安全清理（覆盖卷外 TempFile 泄漏 + profile backup 目录 + 孤儿 GUI）
   - References: `lo-encryption-demo/src/cipherbox.py` 的 `_seekable_output_stream`（当前 `RemoveFile=False`，明文 TempFile 可能残留在 %TEMP%——需评估并处置）。
   - Acceptance: 受控打开/关闭后 `S:\.cipherbox-tmp\` 无明文残留；**Agent 重启时（在任何受控打开请求受理之前、且 watcher 启动（含存量扫描与防抖事件处理）之前同步完成恢复——先重放 `S:\.cipherbox-tmp\audit-queue\`（补记 `action=encrypt` 审计+补登 superseded）再执行孤儿恢复，确保崩溃会话的 superseded 条目已入清单后孤儿恢复与 watcher 判 `encrypt_superseded` 才查清单，堵恢复误判/扫描误覆盖）遍历 `%APPDATA%\CipherBox\sessions\*.json`，对孤儿临时明文先校验完整性（`PK\x03\x04` magic + 可解析），再查 Agent superseded 清单（源明文已被拦截器强制保存的更新 `.cbx` 取代 → 隔离临时明文+审计告警，不覆盖），且仅在临时明文 sha256 ≠ session `orig_sha256` 时才按其 session 记录 `cbx_path` 重加密回 `.cbx`（**密钥用当前主密钥、经 todo 11 在线刷新规则，审计 key_version=当前版本**；有改动才重加密）；**重加密前若目标 `.cbx` 的 mtime 新于 session 记录 `ts` → 隔离孤儿 temp+审计告警，禁止覆盖（堵"S1 崩溃后 S2 已更新 `.cbx`，恢复却用 S1 孤儿明文覆盖"的静默数据丢失）**；随后清理；损坏则保留原 `.cbx`、隔离临时文件并审计告警，先杀孤儿受控 GUI；同时扫描 `S:\.cipherbox-tmp\` 下无对应 session 记录的会话目录（**会话目录=UUID 命名目录；`service` 与 `audit-queue` 子目录豁免此清扫**），按陈旧时间隔离/清理并审计告警（堵"解密后、记录落盘前崩溃"的孤儿）**；**受控流程用 todo 10 的 `container.py` 自行解密（不经过引擎 decrypt），因此引擎的 %TEMP% TempFile 不产生**；**受控 GUI 启动时无条件设 `TMP=TEMP=S:\.cipherbox-tmp\<会话>\`**（即使不经引擎 decrypt 也消除卷外明文残留），`%TEMP%` 扫描保留为回归断言；**扫描范围含受控与服务 profile 的 backup/AutoRecovery 目录（断言无明文 office 文件）**。
   - QA happy: 打开→关闭后扫描 `S:\.cipherbox-tmp\`、`%TEMP%`、受控与服务 profile backup 目录均无明文 office 文件。
   - QA failure: 崩溃场景 → 重启 Agent 先对孤儿临时明文重加密回 `.cbx`（有改动时）再清理（含杀孤儿 GUI）并记录；**Agent 重启后 superseded 清单仍生效（watcher 不覆盖新 `.cbx`、恢复不误判）**。
   - Commit: 清理逻辑 + 测试。
 
-- [ ] 27. 审计完整性（HMAC 哈希链 + 链头锚点，防篡改+防尾部删除）
+- [x] 27. 审计完整性（HMAC 哈希链 + 链头锚点，防篡改+防尾部删除）
   - References: 服务器 `/events`；`cipherbox.py` 已有 `hmac` 依赖。
   - Acceptance: 每条审计事件附行级 HMAC（密钥=服务器密钥，不出库，`SHA-256`）**+ 前一行哈希链（`prev_hash` = 前一行事件的 `mac`，首行填 `HMAC(key,"genesis")`）+ 单调 `id`**；服务器只追加不覆盖（无 UPDATE/DELETE 暴露）；**在 events 表外维护链头锚点 `meta(chain_head, chain_count)`**（每追加一行更新为运行式密钥链 `chain_head_n = HMAC(key, chain_head_{n-1} || mac_n)`，初值 `HMAC(key, "genesis")`——**不可从表内数据重放**，锚点与事件分离存储，同一事务更新）；提供校验命令 `python -m server.verify_audit`（校验每行 HMAC + 哈希链连续 + id 无缺口 + **重放运行链比对 chain_head 且行数==chain_count**）。**HMAC 密钥由 todo 20 部署时生成、存于仅管理员可读的配置文件，不入 DB/日志/仓库。**（整库文件级回滚的检测超出本期，已在 Scope Out 声明。）
   - QA happy: 运行 `python -m server.verify_audit` → 全部通过；`sqlite3` 篡改一条 → 非零退出并定位到行；`sqlite3` 删除末尾 N 行 → 校验命令检出；**`sqlite3` 删除末尾 N 行并把新末行的 mac 抄入 meta.chain_head、chain_count 改为剩余行数 → 校验命令仍必须检出（运行链无法从表内数据重放）**。
