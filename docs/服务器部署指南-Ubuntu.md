@@ -104,7 +104,9 @@ server/.venv/bin/python -m pytest server/tests -q        # 53 passed（Ubuntu 24
 
 | 现象 | 处理 |
 |---|---|
-| `curl astral.sh` 超时装不上 uv | 手动从 GitHub release 下载 uv 二进制放 `~/.local/bin/`，或代理后重试 |
+| 浏览器访问 `https://<IP>:8443/` 返回 `{"detail":"Not Found"}` | **正常**——这是纯 API 服务，没有网页。`/` 未定义路由即 404；能收到这个 JSON 恰好证明 TLS 和跨机器访问是通的。健康检查用 `/health` |
+| 客户端（浏览器/Agent）报证书校验失败 | 证书默认 SAN 只有 localhost/127.0.0.1。双机部署必须 `--force --san IP:<服务器IP>` 重签并重启服务，再把 `ca.crt` 分发给客户端 |
+| `curl astral.sh` 超时装不上 uv | 手动从 GitHub release 下载 uv 二进制放 `~/.local/bin/`，或代理后重试（安装器自带备用下载地址，失败会自动切换） |
 | venv 步骤 404 / 下载慢 | 确认 `UV_PYTHON_INSTALL_MIRROR` 指向 npmmirror（脚本默认已设；勿用 TUNA——它不同步 python-build-standalone） |
 | 端口被占 | `ss -ltnp \| grep 8443` 找进程，或 `CIPHERBOX_PORT=9443` 换端口 |
 | `bash: 行N: 未预期的记号` / `\r` 报错 | 脚本被 CRLF 污染：仓库 `.gitattributes` 已强制 `*.sh eol=lf`；手动修复 `sed -i 's/\r$//' deploy/*.sh` |
