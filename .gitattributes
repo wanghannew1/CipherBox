@@ -1,0 +1,6 @@
+# 换行保护：跨平台脚本绝不能被 autocrlf 改坏
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf

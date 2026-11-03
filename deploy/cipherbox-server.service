@@ -1,0 +1,36 @@
+# =============================================================================
+# deploy/cipherbox-server.service — systemd 自启单元样例（Ubuntu/Linux）
+#
+# 安装（假设仓库部署在 /opt/cipherbox）：
+#   sudo cp deploy/cipherbox-server.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now cipherbox-server
+#   systemctl status cipherbox-server
+#   journalctl -u cipherbox-server -f          # 跟日志
+#
+# 停止/禁用:
+#   sudo systemctl disable --now cipherbox-server
+# =============================================================================
+[Unit]
+Description=CipherBox key/audit server (HTTPS 8443)
+After=network.target
+
+[Service]
+Type=simple
+# 建议先把仓库部署到 /opt/cipherbox 并创建专用账户（todo 20⑥ 精神）：
+#   sudo useradd -r -s /usr/sbin/nologin cipherbox
+#   sudo chown -R cipherbox:cipherbox /opt/cipherbox
+# 然后取消下面两行注释：
+# User=cipherbox
+# Group=cipherbox
+WorkingDirectory=/opt/cipherbox
+Environment=CIPHERBOX_HMAC_KEY_FILE=/opt/cipherbox/server/audit-hmac.key
+ExecStart=/opt/cipherbox/server/.venv/bin/python -m uvicorn server.app:create_app --factory --host 0.0.0.0 --port 8443 --ssl-certfile server/certs/server.crt --ssl-keyfile server/certs/server.key
+Restart=on-failure
+RestartSec=3
+# 基础加固
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

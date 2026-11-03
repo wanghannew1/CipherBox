@@ -28,10 +28,16 @@ Agent 常驻程序 (agent/)  ──取钥/上报──▶  服务器 (server/, F
 
 ## 快速开始
 
-1. **部署服务器（一键，uv 虚拟环境）**：`docs/服务器部署指南.md`
+1. **部署服务器（一键，uv 虚拟环境）**：
    ```powershell
+   # Windows
    powershell -NoProfile -ExecutionPolicy Bypass -File deploy\server_setup_uv.ps1
    powershell -NoProfile -ExecutionPolicy Bypass -File deploy\server_start.ps1
+   ```
+   ```bash
+   # Ubuntu（国内镜像内置，WSL Ubuntu-24.04 真机验证）
+   bash deploy/server_setup_uv.sh --install-uv
+   bash deploy/server_start.sh
    ```
 2. **单机实测全链路**（起 Agent → 放明文自动加密 → 双击受控打开 → 查审计）：`docs/部署实测指南.md`
 3. **真实环境**：双机部署 + VeraCrypt 卷引导（卷引导脚本 todo 23 未完成，见下）。
@@ -54,7 +60,8 @@ python -m pytest server/tests agent/tests -q      # 201 passed（单元+集成�
 
 | 文档 | 内容 |
 |---|---|
-| `docs/服务器部署指南.md` | 服务器一键部署（uv）/手动步骤/运维/防火墙/自启/排障 |
+| `docs/服务器部署指南.md` | Windows 服务器一键部署（uv）/手动步骤/运维/防火墙/自启/排障 |
+| `docs/服务器部署指南-Ubuntu.md` | Ubuntu 服务器部署（一键/systemd/ufw/双机 SAN/排障） |
 | `docs/部署实测指南.md` | 单机实测全流程（服务器→Agent→加密→受控打开→审计） |
 | `.omo/plans/cipherbox-transparent-encryption.md` | 权威计划（27 todo + 验收标准） |
 | `.omo/handoff-session-summary.md` | 最新进度与缺口清单 |
