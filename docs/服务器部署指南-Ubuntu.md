@@ -85,14 +85,22 @@ sudo ufw allow 8443/tcp
 # 客户端 config/client.json: server_url=https://<服务器IP>:8443
 ```
 
-## 双机部署要点：证书 SAN
+## 双机部署要点：证书 SAN + CA 分发（⚠️ 客户端连不上的头号原因）
 
-自签证书默认 SAN 只含 `localhost / 127.0.0.1`，客户端从别的机器访问会证书校验失败。用 `--san` 加入服务器 IP 后重签（然后重新分发 ca.crt 给客户端）：
+自签证书默认 SAN 只含 `localhost / 127.0.0.1`。客户端从别的机器访问会双重失败：证书链对不上 + 主机名不匹配。**在服务器上**重签（`--san` 必须带真实 IP，替换占位符！`--force` 会连 CA 一起更换）：
 
 ```bash
-server/.venv/bin/python deploy/gen_certs.py --force \
-  --san DNS:cipherbox.corp --san IP:192.168.1.10
+server/.venv/bin/python deploy/gen_certs.py --force --san IP:192.168.1.10
+# 然后重启服务生效（前台 Ctrl+C 重跑，或 sudo systemctl restart cipherbox-server）
 ```
+
+**⚠️ 重签后 CA 也变了——必须把新的 `server/certs/ca.crt` 重新分发给每一个客户端**（覆盖客户端配置里 `ca_cert_file` 指向的文件），否则客户端全部报 `unable to get local issuer certificate`：
+
+```bash
+cat server/certs/ca.crt        # 复制输出内容到客户端
+```
+
+客户端 `config\client.json` 的 `server_url` 用 IP 直连时，SAN 里必须有对应 `IP:<服务器IP>` 条目。
 
 ## 运行测试（可选，验证部署完整性）
 

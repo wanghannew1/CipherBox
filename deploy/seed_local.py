@@ -23,7 +23,7 @@ _REPO_ROOT = str(Path(__file__).resolve().parents[1])
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from server import auth, database  # noqa: E402
+from server import auth, database, key_manager  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -41,12 +41,15 @@ def main(argv: list[str] | None = None) -> int:
     with database.session(args.db) as conn:
         admin_token = auth.issue_token(conn, args.admin_name, "admin")
         employee_token = auth.issue_token(conn, args.employee_name, "employee")
+        key_set = key_manager.rotate(conn)  # 初始主密钥 v1：保证 /key 首次即非空
 
     hmac_key = os.urandom(32)
     with open(args.hmac_out, "wb") as fh:
         fh.write(hmac_key)
 
     print(f"[seed] db: {args.db}")
+    print(f"[seed] hmac key file: {args.hmac_out} (32 random bytes; ACL-restrict it)")
+    print(f"[seed] master key: v{key_set['current']} issued (key material NOT printed)")
     print(f"[seed] hmac key file: {args.hmac_out} (32 random bytes; ACL-restrict it)")
     print(f"[seed] admin token (shown ONCE - store securely): {admin_token}")
     print(f"[seed] employee token (shown ONCE - store securely): {employee_token}")
