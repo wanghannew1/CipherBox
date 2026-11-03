@@ -25,6 +25,7 @@ param(
     [string]$EmployeeToken,
     [string]$Volume = "S:\",
     [string]$RepoRoot = "",
+    [string]$CaCertFile = "",
     [switch]$Associate,
     [switch]$InstallUv,
     [switch]$Recreate
@@ -127,13 +128,25 @@ if ($LASTEXITCODE -eq 0 -and "$health" -match '"ok"') {
 
 # -- 5. config\client.json（9 个键，按当前参数重写）---------------------------------
 New-Item -ItemType Directory -Force -Path "config" | Out-Null
-$CaFile = "server\certs\ca.crt"
-if (Test-Path -LiteralPath $CaFile) {
-    $CaJson = (Join-Path $RepoRoot $CaFile) -replace '\\', '/'
-    Ok "CA 证书存在（客户端按此 CA 固定校验）: $CaFile"
+if ($CaCertFile) {
+    if (-not (Test-Path -LiteralPath $CaCertFile)) {
+        Write-Host "[setup] 指定的 -CaCertFile 不存在: $CaCertFile" -ForegroundColor Red
+        Write-Host "  请先从服务器复制 server\certs\ca.crt 到本地，再重跑。"
+        exit 1
+    }
+    $CaFile = $CaCertFile
+    $CaJson = ((Resolve-Path -LiteralPath $CaFile).Path) -replace '\\', '/'
+    Ok "CA 证书（-CaCertFile 指定）: $CaJson"
 } else {
-    $CaJson = ""
-    Write-Host "[setup] 警告: 未找到 CA 证书 $CaFile —— 必须从服务器复制（客户端 CA 固定）。" -ForegroundColor Yellow
+    $CaFile = "server\certs\ca.crt"
+    if (Test-Path -LiteralPath $CaFile) {
+        $CaJson = (Join-Path $RepoRoot $CaFile) -replace '\\', '/'
+        Ok "CA 证书存在（客户端按此 CA 固定校验）: $CaFile"
+    } else {
+        $CaJson = ""
+        Write-Host "[setup] 警告: 未找到 CA 证书 $CaFile —— 必须从服务器复制（客户端 CA 固定）。" -ForegroundColor Yellow
+        Write-Host "  推荐做法: 把服务器 server\certs\ca.crt 保存到本地任意路径，重跑加 -CaCertFile <路径>。"
+    }
 }
 
 $volJson = $volBase -replace '\\', '/'

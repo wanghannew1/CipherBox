@@ -35,6 +35,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="where to write the 32-byte HMAC audit key")
     parser.add_argument("--admin-name", default="admin")
     parser.add_argument("--employee-name", default="employee1")
+    parser.add_argument("--force-hmac", action="store_true",
+                        help="覆盖已存在的 HMAC 密钥文件（会使既有审计事件无法用新密钥校验）")
     args = parser.parse_args(argv)
 
     database.init_schema(args.db)
@@ -44,8 +46,12 @@ def main(argv: list[str] | None = None) -> int:
         key_set = key_manager.rotate(conn)  # 初始主密钥 v1：保证 /key 首次即非空
 
     hmac_key = os.urandom(32)
-    with open(args.hmac_out, "wb") as fh:
-        fh.write(hmac_key)
+    if os.path.exists(args.hmac_out) and not args.force_hmac:
+        print(f"[seed] hmac key file 已存在，保留不动: {args.hmac_out}")
+        print("       （覆盖会使既有审计事件无法用新密钥校验；确要轮换请加 --force-hmac）")
+    else:
+        with open(args.hmac_out, "wb") as fh:
+            fh.write(hmac_key)
 
     print(f"[seed] db: {args.db}")
     print(f"[seed] hmac key file: {args.hmac_out} (32 random bytes; ACL-restrict it)")
