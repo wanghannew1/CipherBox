@@ -143,9 +143,12 @@ def build_runtime(loaded: LoadedConfig, *, with_watcher: bool, pipe_name: str = 
             # Adapter: the driver already writes <plain>.cbx atomically; the
             # Encryptor pipeline re-writes it through its own .cbx.tmp rename.
             cbx = os.path.abspath(plain_path) + CBX_SUFFIX
+            print(f"[agent] encrypting: {plain_path}")
             uno_driver.encrypt_to_cbx(plain_path, cbx, password)
             with open(cbx, "rb") as fh:
-                return fh.read()
+                data = fh.read()
+            print(f"[agent] encrypted: {cbx} ({len(data)} bytes)")
+            return data
 
         encryptor = Encryptor(
             encrypt_func=encrypt_func,
@@ -166,19 +169,24 @@ def build_runtime(loaded: LoadedConfig, *, with_watcher: bool, pipe_name: str = 
 
 
 def run_resident(rt: Runtime) -> None:
-    """Ordered startup (plan todo 26), then block in the pipe accept loop."""
-    report = rt.recovery_runner(rt)  # 1. recovery: before watcher AND before pipe
-    print("[agent] recovery:", _format_counts(report))
-    key_set = rt.key_manager.ensure_keys(online=True)  # 2. keys, online w/ cache fallback
+    """Ordered startup, then block in the pipe accept loop.
+
+    Keys come BEFORE recovery: the orphan re-encrypt inside recovery needs
+    the current key.  Recovery still precedes the watcher and any
+    controlled-open request (plan todo 26 ordering constraint kept).
+    """
+    key_set = rt.key_manager.ensure_keys(online=True)  # 1. keys (online w/ cache fallback)
     print(f"[agent] keys: {len(key_set.versions)} version(s), current=v{key_set.current}")
-    dispatched = rt.audit.flush()  # 2.5 联网后补报本地暂存审计（todo 15）
+    report = rt.recovery_runner(rt)  # 2. crash recovery: before watcher AND before pipe
+    print("[agent] recovery:", _format_counts(report))
+    dispatched = rt.audit.flush()  # 3. 联网后补报本地暂存审计（todo 15）
     if dispatched:
         print(f"[agent] audit: replayed {dispatched} queued event(s)")
-    if rt.watcher is not None:  # 3. watcher thread + startup scan
+    if rt.watcher is not None:  # 4. watcher thread + startup scan
         rt.watcher.start()
         print(f"[agent] watcher: started on {rt.config.protected_dir}")
     try:
-        print(f"[agent] pipe: listening on {rt.pipe_server.pipe_name}")  # 4. pipe server
+        print(f"[agent] pipe: listening on {rt.pipe_server.pipe_name}")  # 5. pipe server
         rt.pipe_server.serve_forever()
     finally:
         if rt.watcher is not None:
@@ -189,14 +197,14 @@ def run_resident(rt: Runtime) -> None:
 
 
 def once_startup(rt: Runtime) -> tuple[RecoveryReport, str]:
-    """--once mode: recovery + key ensure only.  Never crashes offline."""
-    report = rt.recovery_runner(rt)
+    """--once mode: keys + recovery, then exit.  Never crashes offline."""
     try:
         key_set = rt.key_manager.ensure_keys(online=True)
         rt.audit.flush()  # 联网即补报本地暂存审计（todo 15）
         key_state = f"ok: {len(key_set.versions)} version(s), current=v{key_set.current}"
     except KeyManagerError as exc:
         key_state = f"unavailable: {exc}"  # offline and no DPAPI cache
+    report = rt.recovery_runner(rt)
     return report, key_state
 
 

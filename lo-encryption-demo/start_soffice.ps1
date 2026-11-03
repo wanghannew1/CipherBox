@@ -41,7 +41,8 @@ $ProfileDir = "$vol\.cipherbox-profile\service"
 $TmpDir = "$vol\.cipherbox-tmp\service"
 $ProfileUrl = "file:///$vol/.cipherbox-profile/service"
 $EngineSrc = Join-Path $PSScriptRoot "src\cipherbox.py"
-$EngineDst = Join-Path $ProfileDir "user\Scripts\python\cipherbox.py"
+$CryptoSrc = Join-Path $PSScriptRoot "src\cipherbox_crypto.py"
+$EngineDir = Join-Path $ProfileDir "user\Scripts\python"
 
 # -- prerequisites ----------------------------------------------------------
 
@@ -49,7 +50,7 @@ if (-not (Test-Path -LiteralPath "$vol\")) {
     Write-Output "ERROR: volume $vol is not mounted; mount it before starting the service."
     exit 1
 }
-foreach ($p in @($Soffice, $BundledPython, $EngineSrc)) {
+foreach ($p in @($Soffice, $BundledPython, $EngineSrc, $CryptoSrc)) {
     if (-not (Test-Path -LiteralPath $p)) {
         Write-Output "ERROR: required path not found: $p"
         exit 1
@@ -66,15 +67,23 @@ foreach ($p in @($Soffice, $BundledPython, $EngineSrc)) {
 
 $ExtDir = Join-Path $ProfileDir "user\extensions\shared\cipherbox"
 $ComponentBackendDir = Join-Path $ProfileDir "user\extensions\shared\registry\com.sun.star.comp.deployment.component.PackageRegistryBackend"
-New-Item -ItemType Directory -Force -Path $ProfileDir, $TmpDir, (Split-Path -Parent $EngineDst), $ExtDir, $ComponentBackendDir | Out-Null
+New-Item -ItemType Directory -Force -Path $ProfileDir, $TmpDir, $EngineDir, $ExtDir, $ComponentBackendDir | Out-Null
 
-if ((Test-Path -LiteralPath $EngineDst) -and
-    ((Get-FileHash -LiteralPath $EngineSrc).Hash -eq (Get-FileHash -LiteralPath $EngineDst).Hash)) {
-    Write-Output "engine deployment unchanged: $EngineDst"
-}
-else {
-    Copy-Item -LiteralPath $EngineSrc -Destination $EngineDst -Force
-    Write-Output "engine deployed: $EngineSrc -> $EngineDst"
+# The engine module imports its sibling cipherbox_crypto (todo-10 extraction):
+# BOTH files must sit side by side in the profile or the python component
+# fails to instantiate (createInstance returns None, encrypted stores abort).
+foreach ($pair in @(
+        @{ Src = $EngineSrc; Dst = (Join-Path $EngineDir "cipherbox.py") },
+        @{ Src = $CryptoSrc; Dst = (Join-Path $EngineDir "cipherbox_crypto.py") }
+    )) {
+    if ((Test-Path -LiteralPath $pair.Dst) -and
+        ((Get-FileHash -LiteralPath $pair.Src).Hash -eq (Get-FileHash -LiteralPath $pair.Dst).Hash)) {
+        Write-Output "engine deployment unchanged: $($pair.Dst)"
+    }
+    else {
+        Copy-Item -LiteralPath $pair.Src -Destination $pair.Dst -Force
+        Write-Output "engine deployed: $($pair.Src) -> $($pair.Dst)"
+    }
 }
 
 $ModuleUrl = "$ProfileUrl/user/Scripts/python/cipherbox"

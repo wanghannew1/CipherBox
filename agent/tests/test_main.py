@@ -1,7 +1,8 @@
 ﻿"""Composition-root tests for agent/__main__.py.
 
-Covers the plan-mandated startup order (recovery BEFORE watcher start and
-BEFORE pipe accept — asserted through recording fakes injected via the
+Covers the startup order (keys ensure BEFORE recovery — recovery's orphan
+re-encrypt needs the current key — and recovery BEFORE watcher start and
+BEFORE pipe accept; all asserted through recording fakes injected via the
 :class:`Runtime` seam), ``--once`` mode, and graceful shutdown with no
 lingering threads.  Config-loader and build_runtime wiring tests live in
 test_config.py.  Synchronization uses events only.
@@ -43,6 +44,18 @@ class RecordingKeyManager:
         if self._error is not None:
             raise self._error
         return self._key_set
+
+
+class RecordingAudit:
+    def __init__(self, order: list[str]) -> None:
+        self._order = order
+
+    def flush(self) -> int:
+        self._order.append("audit.flush")
+        return 0
+
+    def report(self, *args, **kwargs) -> bool:
+        return True
 
 
 class RecordingWatcher:
@@ -108,7 +121,7 @@ def make_runtime(order: list[str], *, with_watcher: bool, km_error: Exception | 
     return Runtime(
         config=fake_config(),
         key_manager=RecordingKeyManager(order, error=km_error),
-        audit=None,
+        audit=RecordingAudit(order),
         uno_driver=None,
         watcher=RecordingWatcher(order) if with_watcher else None,
         pipe_server=RecordingPipeServer(order),
@@ -134,7 +147,7 @@ class TestStartupOrder:
         wait_and_stop(rt)
         thread.join(timeout=5)
 
-        assert order[:4] == ["recovery", "keys.ensure", "watcher.start", "pipe.serve"]
+        assert order[:5] == ["keys.ensure", "recovery", "audit.flush", "watcher.start", "pipe.serve"]
         assert order.count("watcher.stop") == 1
         assert order.count("pipe.closed") == 1
         assert not thread.is_alive()
@@ -148,7 +161,7 @@ class TestStartupOrder:
         wait_and_stop(rt)
         thread.join(timeout=5)
 
-        assert order[:3] == ["recovery", "keys.ensure", "pipe.serve"]
+        assert order[:4] == ["keys.ensure", "recovery", "audit.flush", "pipe.serve"]
         assert "watcher.start" not in order
         assert "watcher.stop" not in order
 
@@ -170,7 +183,7 @@ class TestGracefulShutdown:
 
         assert outcomes == [0]
         assert not outer.is_alive()
-        assert order[:4] == ["recovery", "keys.ensure", "watcher.start", "pipe.serve"]
+        assert order[:5] == ["keys.ensure", "recovery", "audit.flush", "watcher.start", "pipe.serve"]
         assert order.count("watcher.stop") == 1
         assert order.count("pipe.closed") == 1
         assert not any(t.name == "cipherbox-agent" for t in threading.enumerate())
@@ -189,7 +202,7 @@ class TestOnceMode:
 
         assert isinstance(report, RecoveryReport)
         assert key_state == "ok: 2 version(s), current=v3"
-        assert order == ["recovery", "keys.ensure"]  # never watcher, never pipe
+        assert order == ["keys.ensure", "audit.flush", "recovery"]  # never watcher, never pipe
 
     def test_offline_without_cache_reports_unavailable(self):
         order: list[str] = []
@@ -202,7 +215,7 @@ class TestOnceMode:
         assert isinstance(report, RecoveryReport)
         assert "unavailable" in key_state
         assert "offline and no key cache available" in key_state
-        assert order == ["recovery", "keys.ensure"]
+        assert order == ["keys.ensure", "recovery"]  # flush skipped: ensure_keys failed
 
     def test_main_once_cli(self, tmp_path: Path, monkeypatch, capsys):
         order: list[str] = []

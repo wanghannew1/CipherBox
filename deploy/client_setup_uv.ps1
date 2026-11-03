@@ -233,4 +233,4 @@ if (-not $Associate) {
 }
 Write-Host "  注意: 服务器需已有至少 1 个密钥版本（新版 seed_local.py 种子时自动签发 v1;"
 Write-Host "        旧部署需管理员调一次 /admin/rotate），否则 Agent 的 keys 行会报空版本错误。"
-Write-Host "  启动成功标志: Agent 窗口依次出现 recovery -> keys -> watcher -> pipe 四行。"
+Write-Host "  启动成功标志: Agent 窗口依次出现 keys -> recovery -> watcher -> pipe 四行。"

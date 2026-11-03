@@ -497,7 +497,9 @@ class _Recovery:
         rejection branch).  On failure keep temp + record for the next boot."""
         try:
             password, _version = _resolve_current_key(self.config)
-        except CleanupError as exc:
+        except (CleanupError, KeyManagerError) as exc:
+            # KeyManagerError: ensure_keys not yet run (offline boot) — keep
+            # temp + record so the next startup (with keys) retries.
             self._audit("encrypt", current_hash, False, str(exc))
             self.report.reencrypt_failed += 1
             return
