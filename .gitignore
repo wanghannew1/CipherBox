@@ -18,3 +18,7 @@ server/*.db
 server/audit-hmac.key
 server/hmac.key
 
+
+# 客户端本机配置（含 DPAPI 令牌，机器专属不入库）
+config/
+
