@@ -171,6 +171,9 @@ def run_resident(rt: Runtime) -> None:
     print("[agent] recovery:", _format_counts(report))
     key_set = rt.key_manager.ensure_keys(online=True)  # 2. keys, online w/ cache fallback
     print(f"[agent] keys: {len(key_set.versions)} version(s), current=v{key_set.current}")
+    dispatched = rt.audit.flush()  # 2.5 联网后补报本地暂存审计（todo 15）
+    if dispatched:
+        print(f"[agent] audit: replayed {dispatched} queued event(s)")
     if rt.watcher is not None:  # 3. watcher thread + startup scan
         rt.watcher.start()
         print(f"[agent] watcher: started on {rt.config.protected_dir}")
@@ -190,6 +193,7 @@ def once_startup(rt: Runtime) -> tuple[RecoveryReport, str]:
     report = rt.recovery_runner(rt)
     try:
         key_set = rt.key_manager.ensure_keys(online=True)
+        rt.audit.flush()  # 联网即补报本地暂存审计（todo 15）
         key_state = f"ok: {len(key_set.versions)} version(s), current=v{key_set.current}"
     except KeyManagerError as exc:
         key_state = f"unavailable: {exc}"  # offline and no DPAPI cache
