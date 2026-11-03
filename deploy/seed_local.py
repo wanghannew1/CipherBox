@@ -43,20 +43,19 @@ def main(argv: list[str] | None = None) -> int:
     with database.session(args.db) as conn:
         admin_token = auth.issue_token(conn, args.admin_name, "admin")
         employee_token = auth.issue_token(conn, args.employee_name, "employee")
-        key_set = key_manager.rotate(conn)  # 初始主密钥 v1：保证 /key 首次即非空
+        key_set = key_manager.rotate(conn)  # 轮换出新主密钥版本（首个库为 v1）
 
-    hmac_key = os.urandom(32)
-    if os.path.exists(args.hmac_out) and not args.force_hmac:
+    hmac_written = not (os.path.exists(args.hmac_out) and not args.force_hmac)
+    if hmac_written:
+        with open(args.hmac_out, "wb") as fh:
+            fh.write(os.urandom(32))
+        print(f"[seed] db: {args.db}")
+        print(f"[seed] hmac key file: {args.hmac_out} (32 random bytes; ACL-restrict it)")
+    else:
+        print(f"[seed] db: {args.db}")
         print(f"[seed] hmac key file 已存在，保留不动: {args.hmac_out}")
         print("       （覆盖会使既有审计事件无法用新密钥校验；确要轮换请加 --force-hmac）")
-    else:
-        with open(args.hmac_out, "wb") as fh:
-            fh.write(hmac_key)
-
-    print(f"[seed] db: {args.db}")
-    print(f"[seed] hmac key file: {args.hmac_out} (32 random bytes; ACL-restrict it)")
     print(f"[seed] master key: v{key_set['current']} issued (key material NOT printed)")
-    print(f"[seed] hmac key file: {args.hmac_out} (32 random bytes; ACL-restrict it)")
     print(f"[seed] admin token (shown ONCE - store securely): {admin_token}")
     print(f"[seed] employee token (shown ONCE - store securely): {employee_token}")
     print("[seed] if either token leaks, revoke + reissue via the admin API.")
