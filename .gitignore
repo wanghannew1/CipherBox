@@ -13,3 +13,8 @@ __pycache__/
 # cipherbox server runtime secrets/material (never commit)
 server/certs/
 server/*.db
+
+# HMAC 审计密钥（种子脚本产物，绝不入库）
+server/audit-hmac.key
+server/hmac.key
+

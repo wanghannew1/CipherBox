@@ -30,6 +30,14 @@ $VenvPython = "server\.venv\Scripts\python.exe"
 function Step($msg) { Write-Host "[setup] $msg" -ForegroundColor Cyan }
 function Ok($msg)   { Write-Host "[setup] $msg" -ForegroundColor Green }
 
+# -- 0. 国内镜像默认（npmmirror 同步 python-build-standalone，TUNA 同步 PyPI）----------
+if (-not $env:UV_PYTHON_INSTALL_MIRROR) {
+    $env:UV_PYTHON_INSTALL_MIRROR = "https://registry.npmmirror.com/-/binary/python-build-standalone"
+}
+if (-not $env:UV_DEFAULT_INDEX) {
+    $env:UV_DEFAULT_INDEX = "https://pypi.tuna.tsinghua.edu.cn/simple"
+}
+
 # -- 1. uv -------------------------------------------------------------------
 $uvCmd = Get-Command uv -ErrorAction SilentlyContinue
 if (-not $uvCmd) {
