@@ -21,7 +21,9 @@ from ctypes import wintypes
 
 from agent.winpipe import (
     BUFFER_SIZE,
+    ERROR_BROKEN_PIPE,
     ERROR_IO_PENDING,
+    ERROR_NO_DATA,
     ERROR_PIPE_BUSY,
     ERROR_PIPE_CONNECTED,
     GENERIC_READ_WRITE,
@@ -76,8 +78,16 @@ class OpenPipeServer:
             instance = self._create_instance()
             self.listening.set()
             while True:
-                if not self._await_client(instance):
+                status = self._await_client(instance)
+                if status == "shutdown":
                     break  # shutdown while waiting for a client
+                if status == "stale":
+                    # A client connected to this standby and hung up before we
+                    # accepted it (launcher timeout during a long session).
+                    # Discard the instance, build a fresh one, keep serving.
+                    kernel32.CloseHandle(instance)
+                    instance = self._create_instance()
+                    continue
                 # Standby instance created BEFORE serving the current one so a
                 # client arriving right after this connection never finds the
                 # pipe absent (no accept window between instances).
@@ -105,28 +115,36 @@ class OpenPipeServer:
             raise PipeError("CreateNamedPipeW failed", ctypes.get_last_error())
         return handle
 
-    def _await_client(self, handle) -> bool:
-        """Wait for a client; False means shutdown fired first."""
+    def _await_client(self, handle) -> str:
+        """Wait for a client on this pipe instance.
+
+        Returns ``"connected"``; ``"stale"`` (a client connected to this
+        standby and hung up before the server accepted it — the instance must
+        be discarded and rebuilt); or ``"shutdown"`` (the server is stopping).
+        """
         overlapped = OVERLAPPED()
         overlapped.hEvent = create_manual_reset_event()
         try:
             if kernel32.ConnectNamedPipe(handle, ctypes.byref(overlapped)):
-                return True  # completed synchronously
+                return "connected"  # completed synchronously
             error = ctypes.get_last_error()
             if error == ERROR_PIPE_CONNECTED:
-                return True  # client connected between create and connect
+                return "connected"  # client connected between create and connect
+            if error in (ERROR_NO_DATA, ERROR_BROKEN_PIPE):
+                kernel32.DisconnectNamedPipe(handle)
+                return "stale"
             if error != ERROR_IO_PENDING:
                 raise PipeError("ConnectNamedPipe failed", error)
             wait = wait_any([overlapped.hEvent, self._shutdown], 0xFFFFFFFF)
             if wait != WAIT_OBJECT_0:  # shutdown fired (or unexpected failure)
                 kernel32.CancelIo(handle)
-                return False
+                return "shutdown"
             transferred = wintypes.DWORD(0)
             if not kernel32.GetOverlappedResult(
                 handle, ctypes.byref(overlapped), ctypes.byref(transferred), False
             ):
                 raise PipeError("overlapped connect failed", ctypes.get_last_error())
-            return True
+            return "connected"
         finally:
             kernel32.CloseHandle(overlapped.hEvent)
 

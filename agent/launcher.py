@@ -18,6 +18,8 @@ from pathlib import Path
 
 from agent.ipc import PIPE_NAME, PipeError, connect_and_request
 
+SESSION_TIMEOUT_S = 3600.0  # the response arrives when the controlled session ends (minutes)
+
 SPAWN_WAIT_S = 10.0
 POLL_INTERVAL_S = 0.25
 
@@ -35,7 +37,7 @@ def main(argv: list[str] | None = None, *, spawn_wait_s: float | None = None) ->
     request = {"cmd": "open", "path": os.path.abspath(args.cbx_path)}
 
     try:
-        response = connect_and_request(args.pipe, request)
+        response = connect_and_request(args.pipe, request, timeout_s=SESSION_TIMEOUT_S)
     except PipeError as first_error:
         if not first_error.pipe_absent:
             print(f"cipherbox: agent pipe error: {first_error}", file=sys.stderr)
@@ -59,17 +61,21 @@ def main(argv: list[str] | None = None, *, spawn_wait_s: float | None = None) ->
 
 
 def _await_agent(pipe_name: str, request: dict, wait_s: float) -> dict:
-    """Bounded poll for the agent pipe, one final retry, then fail loudly."""
+    """Bounded poll for the agent pipe, one final retry, then fail loudly.
+
+    The spawn budget bounds only the CONNECT; once connected, the response
+    wait uses the session timeout (the session runs as long as the user edits).
+    """
     deadline = time.monotonic() + wait_s
     last_error: PipeError | None = None
     while time.monotonic() < deadline:
         try:
-            return connect_and_request(pipe_name, request)
+            return connect_and_request(pipe_name, request, timeout_s=SESSION_TIMEOUT_S)
         except PipeError as exc:
             last_error = exc
             time.sleep(min(POLL_INTERVAL_S, max(0.0, deadline - time.monotonic())))
     try:
-        return connect_and_request(pipe_name, request)
+        return connect_and_request(pipe_name, request, timeout_s=SESSION_TIMEOUT_S)
     except PipeError as exc:
         raise PipeError(
             f"resident agent did not become reachable within {wait_s:g}s "

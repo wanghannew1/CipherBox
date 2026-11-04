@@ -104,6 +104,46 @@ class TestOpenPipeServer:
         assert "boom" in response["error"]
 
 
+class TestStaleStandbyInstance:
+    def test_stale_standby_survives_and_keeps_serving(self, monkeypatch):
+        """A client that connects to the standby instance and hangs up before
+        the server accepts it (launcher timeout during a long session) leaves
+        the instance stale: ConnectNamedPipe fails with ERROR_NO_DATA (232).
+        The server must discard the stale instance and keep serving."""
+        import ctypes
+
+        from agent import winpipe
+
+        real_connect = winpipe.kernel32.ConnectNamedPipe
+        state = {"calls": 0}
+
+        def fake_connect(handle, overlapped_ref):
+            state["calls"] += 1
+            if state["calls"] == 1:
+                ctypes.set_last_error(232)  # ERROR_NO_DATA: stale standby
+                return 0
+            return real_connect(handle, overlapped_ref)
+
+        monkeypatch.setattr(winpipe.kernel32, "ConnectNamedPipe", fake_connect)
+
+        received: list[str] = []
+
+        def handler(path: str) -> dict:
+            received.append(path)
+            return {"ok": True, "path": path}
+
+        server, thread = start_server(handler)
+        try:
+            response = connect_and_request(
+                server.pipe_name, {"cmd": "open", "path": r"S:\x.cbx"})
+        finally:
+            stop_server(server, thread)
+
+        assert state["calls"] >= 1, "stale path never exercised"
+        assert response == {"ok": True, "path": r"S:\x.cbx"}
+        assert received == [r"S:\x.cbx"]
+
+
 class TestConnectAndRequest:
     def test_absent_pipe_raises_typed_error(self):
         name = make_unique_name()  # never created

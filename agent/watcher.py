@@ -42,7 +42,11 @@ if sys.platform != "win32":  # pragma: no cover - Windows-only agent
 OFFICE_EXTENSIONS = {".docx", ".xlsx", ".pptx"}
 
 # Excluded directory names (relative to the protected root).
-EXCLUDED_DIRS = {".cipherbox-tmp", ".cipherbox-profile", ".cipherbox-quarantine"}
+EXCLUDED_DIRS = {
+    ".cipherbox-tmp", ".cipherbox-profile", ".cipherbox-quarantine",
+    "$recycle.bin",               # 已删除的文件进回收站，不该再加密
+    "system volume information",  # NTFS 卷信息目录
+}
 
 # Excluded file suffixes.
 EXCLUDED_SUFFIXES = (".cbx", ".cbx.tmp")

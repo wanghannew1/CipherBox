@@ -76,6 +76,11 @@ class TestExclusions:
         w = ProtectedFolderWatcher(tmp_root, on_candidate=lambda p: None)
         assert w._should_track(_mkfile(tmp_root, ".CIPHERBOX-TMP", "a.docx")) is False
 
+    def test_recycle_bin_excluded(self, tmp_root):
+        w = ProtectedFolderWatcher(tmp_root, on_candidate=lambda p: None)
+        assert w._should_track(_mkfile(tmp_root, "$recycle.bin", "a.docx")) is False
+        assert w._should_track(_mkfile(tmp_root, "$RECYCLE.BIN", "b.docx")) is False
+
 
 # ---------------------------------------------------------------------------
 # companion lock
