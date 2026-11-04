@@ -426,15 +426,21 @@ class _Recovery:
             _remove_dir(os.path.dirname(tmp_path))
             self.report.record_only_removed += 1
             return
+
+        # Kill any lingering controlled GUI FIRST, for every branch: a live
+        # soffice holding the temp would (a) break the deletes below on
+        # Windows (sharing violation -> record deleted, plaintext stranded),
+        # and (b) keep referencing the temp after cleanup ("file not found").
+        self._kill_orphans(tmp_path)
+
         try:
             current_hash = _sha256_file(tmp_path)
         except OSError:
             current_hash = "0" * 64  # unreadable temp == integrity failure
         ledger = SupersededLedger(self.config.ledger_file or "")
 
-        # a. integrity: corrupt -> kill orphan GUI first, keep .cbx, quarantine.
+        # a. integrity: corrupt -> keep .cbx, quarantine.
         if not _temp_intact(tmp_path):
-            self._kill_orphans(tmp_path)
             _quarantine(tmp_path, self.config.quarantine_dir)
             _remove_dir(os.path.dirname(tmp_path))
             ledger.prune_source(tmp_path)

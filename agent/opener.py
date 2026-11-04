@@ -473,7 +473,10 @@ class SingleInstanceMutex:
         self._mutex = kernel32.CreateMutexW(None, True, name)  # bInitialOwner=True
         if not self._mutex:
             raise ctypes.WinError(ctypes.get_last_error())
-        last_err = kernel32.GetLastError()
+        # use_last_error=True: ctypes restores the thread error code after the
+        # call, so the Win32 GetLastError() would return the PRE-call value.
+        # ctypes.get_last_error() is the only reliable reader here.
+        last_err = ctypes.get_last_error()
         self._owned = last_err != self.ERROR_ALREADY_EXISTS
         if not self._owned:
             # Another instance owns it; release our (non-owning) handle.
