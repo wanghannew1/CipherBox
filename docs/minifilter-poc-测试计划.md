@@ -2,7 +2,7 @@
 
 > 目的：评估开源/研究级 minifilter 驱动能否为 CipherBox 提供"**卷内明文按进程管控**"的补充层
 > （授权进程=LO/WPS 可读写 `S:\`，非授权进程=微信/浏览器等 拒绝访问）。
-> 被测对象：FOKS-TROT（预编译优先）、Hades-Windows（目录访问黑白名单）、EDR-DataProtector（源码评估）、EaseFilter demo（可选）。
+> 被测对象：FOKS-TROT（预编译优先）、Hades-Windows（目录访问黑白名单）、EaseFilter demo（可选）。
 > 测试环境：**Hyper-V 虚拟机**（与主机隔离；被测驱动均为研究/实验性质，蓝屏风险由快照兜底）。
 > 仓库已克隆至 `C:\minifilter-poc\`（Hades-Windows / FOKS-TROT / FilterDriver）。
 
@@ -20,14 +20,14 @@
 2. 开测试签名：`bcdedit /set testsigning on` + 重启（桌面出现"测试模式"水印属预期）→ 再拍快照 `testsigning`
 3. （可选，测试机）关闭 Defender 实时保护，避免干扰未签名驱动加载
 
-## 2. 被测对象
+## 2. 被测对象（预编译产物已就位：`C:\minifilter-poc\packages\`）
 
 | 驱动 | 获取 | 形态 | 许可 | 与需求的关系 |
 |---|---|---|---|---|
-| FOKS-TROT 1.0.0.2265.02 | GitHub Release 安装包 | 双缓冲透明加密：授权进程读明文视图，非授权进程读密文视图且禁改 | GPL-3.0 | **驱动级透明加密**（替代/补充 .cbx 的路线） |
-| Hades-Windows 目录访问保护 | Release 二进制或源码构建（VS2019+WDK） | HIPS 目录黑白名单：按进程 × 目录 allow/deny | Apache-2.0（可集成复用） | **卷内明文按进程管控**（叠加层） |
-| EDR-DataProtector | 源码构建（VS2019+WDK） | minifilter 透明保护 + DLP + 中央策略平台 | 待查 license | 同类平台，评估成熟度 |
-| EaseFilter demo | GitHub demo 代码 + 官网 SDK 评估版 | 商业 SDK（成品驱动 + 用户态策略 API） | 商业许可 | "买驱动写逻辑"的采购路线参考 |
+| FOKS-TROT 1.0.0.2265.02 | **预编译 setup.exe 已下载**（packages\FOKS-TROT-setup.exe，5.1MB） | 双缓冲透明加密：授权进程读明文视图，非授权进程读密文视图且禁改 | GPL-3.0 | **驱动级透明加密**（替代/补充 .cbx 的路线） |
+| Hades-Windows v2.3.6.1 | **预编译 x64 包已下载**（packages\HadesWin_x64_v2.3.6.1.zip，8.4MB）——**无需 VS/WDK 编译** | HIPS 目录黑白名单：按进程 × 目录 allow/deny | Apache-2.0（可集成复用） | **卷内明文按进程管控**（叠加层） |
+| EaseFilter demo | 仓库已克隆（FilterDriver\Bin 含预编译 EaseFlt.sys x64） | 商业 SDK（成品驱动 + 用户态策略 API） | 商业许可（demo 代码免费） | "买驱动写逻辑"的采购路线参考 |
+| ~~EDR-DataProtector~~ | ~~已剔除~~：仓库 404（2026-11-04 核实，已删除/转私有） | — | — | — |
 
 ## 3. 通用测试流程（每个驱动重复）
 
@@ -56,20 +56,16 @@
 
 | # | 用例 | 步骤 | 通过判据 |
 |---|---|---|---|
-| H1 | 部署 | Release 二进制优先；无则源码构建（VS2019+WDK，主机未装 → 单独评估安装成本） | HadesSvc + 驱动加载无蓝屏 |
+| H1 | 部署 | Release 预编译包已下载（`packages\HadesWin_x64_v2.3.6.1.zip`），解压即用，无需编译 | HadesSvc + 驱动加载无蓝屏 |
 | H2 | 白名单规则 | FileIORule 白名单：仅 LO/notepad/wps 可访问 `C:\SecretDir` | 白名单进程读写正常 |
 | H3 | 拒绝验证 | 非白名单进程读 `C:\SecretDir\x.docx` | 访问被拒（deny 生效） |
 | H4 | 规则热更新 | 修改规则配置下发 | 即时生效 |
 | H5 | **误伤评估** | 系统目录 + 常用软件正常操作 30 分钟 | 无误拦、无性能异常 |
 | H6 | 稳定性 | 强杀 HadesSvc、规则冲突注入 | 服务可控重启，规则持久 |
 
-## 6. EDR-DataProtector 用例（评估级别）
+## 6. EDR-DataProtector（已剔除）
 
-| # | 用例 | 内容 |
-|---|---|---|
-| D1 | 构建评估 | VS2019+WDK 工程编译通过性、依赖清单、license 确认 |
-| D2 | 功能面评估 | minifilter 透明保护 + 策略中心是否可独立启用（浅测不深测） |
-| D3 | 成熟度 | 代码质量、维护状态、issue 响应 |
+仓库已于 2026-11-04 核实为 404（删除/转私有），从 PoC 剔除。若后续恢复可访问再纳入。
 
 ## 7. EaseFilter demo（可选，采购路线参考）
 
@@ -84,7 +80,7 @@
 |---|---|---|---|---|---|---|---|---|
 | FOKS-TROT | | | | | | 有（待复现） | GPL-3.0 | |
 | Hades-Windows | | | | | | N/A（不加密） | Apache-2.0 | |
-| EDR-DataProtector | | | | | | 待查 | 待查 | |
+| ~~EDR-DataProtector~~ | ~~已剔除~~（仓库 404，见 §6） | — | — | — | |
 | EaseFilter | | | | | | 待查（SDK 支持密文外发拷贝进程） | 商业 | |
 
 ## 9. 决策输出
