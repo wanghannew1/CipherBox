@@ -4,6 +4,47 @@
 > 本指南全部命令已在 **WSL Ubuntu-24.04 真机验证**：一键部署、53 项测试全绿、HTTPS 健康检查通过。
 > Windows 部署见《[服务器部署指南](服务器部署指南.md)》。
 
+## 0. 先决定：部署身份与目录（⚠️ 权限报错先看这里）
+
+部署命令必须**以拥有目录的账户身份执行**。两种受支持的布局：
+
+### 布局 A（简单）：家目录 + 你的日常账户
+
+```bash
+git clone <仓库> ~/cipherbox && cd ~/cipherbox
+bash deploy/server_setup_uv.sh --install-uv     # 你自己跑，全部写在你自己的家目录
+```
+
+一切命令（部署/`git pull`/seed 签发/重启）都以**同一个用户**执行即可，无权限问题。个人/测试环境用这个。
+
+### 布局 B（生产推荐）：/opt + 专用服务账户
+
+`/opt/cipherbox` 归 `cipherbox` 服务账户所有（见 systemd 小节）后，**所有**服务器操作都要以该账户身份执行——包括部署本身：
+
+```bash
+# 一次性准备：服务账户要有 home（uv 缓存需要；useradd -r 默认没有）
+sudo mkdir -p /home/cipherbox && sudo chown cipherbox:cipherbox /home/cipherbox
+# uv 放系统路径，服务账户才能用
+sudo cp ~/.local/bin/uv /usr/local/bin/
+
+# 部署（注意：以 cipherbox 身份，不是你的日常用户）
+sudo -u cipherbox env HOME=/home/cipherbox bash /opt/cipherbox/deploy/server_setup_uv.sh
+```
+
+之后的 `git pull`、`seed_local.py` 签发、重启，同样走 `sudo -u cipherbox ...`。
+**混用账户（自己跑部署、服务账户跑服务）→ `Permission denied (os error 13)`**——这是本指南此前未写清的坑。
+
+### 从旧位置迁移（如 ~/github-src → /opt）
+
+数据库、CA、HMAC 密钥与已部署客户端是**配对**的，换目录必须带走，否则客户端全部 401：
+
+```bash
+sudo cp ~/旧位置/server/cipherbox.db   /opt/cipherbox/server/
+sudo cp ~/旧位置/server/audit-hmac.key /opt/cipherbox/server/
+sudo cp -r ~/旧位置/server/certs       /opt/cipherbox/server/
+sudo chown -R cipherbox:cipherbox /opt/cipherbox/server
+```
+
 ## 方式一：一键部署（推荐）
 
 ```bash
