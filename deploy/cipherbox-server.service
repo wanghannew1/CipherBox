@@ -1,7 +1,18 @@
 # =============================================================================
 # deploy/cipherbox-server.service — systemd 自启单元样例（Ubuntu/Linux）
 #
-# 安装（假设仓库部署在 /opt/cipherbox）：
+# ⚠️⚠️ 路径必须与实际部署位置一致！
+# 本单元内三处路径（WorkingDirectory、Environment 的 HMAC 密钥、ExecStart）
+# 默认假定仓库部署在 /opt/cipherbox。部署在别处（如家目录）时，安装前先批量
+# 替换为实际路径，否则服务起不来（status=203/EXEC 或找不到密钥文件）：
+#
+#   cd <你的仓库位置>
+#   sudo sed -i "s|/opt/cipherbox|$PWD|g" deploy/cipherbox-server.service
+#
+# User=/Group= 默认注释（服务以 root 运行，不推荐）。生产请取消注释并改为
+# 拥有该目录的账户（布局 B = cipherbox 服务账户；家目录布局 A = 你的部署用户）。
+#
+# 安装：
 #   sudo cp deploy/cipherbox-server.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now cipherbox-server

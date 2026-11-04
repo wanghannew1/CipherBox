@@ -101,18 +101,30 @@ curl -sk -H "Authorization: Bearer <ADMIN_TOKEN>" "https://127.0.0.1:8443/events
 
 ## systemd 开机自启（生产推荐）
 
-```bash
-# 1. 部署到固定路径（unit 文件默认假定 /opt/cipherbox）
-sudo cp -r <仓库> /opt/cipherbox
+**⚠️ 第 0 步：单元路径必须与实际部署位置一致。** `deploy/cipherbox-server.service` 里三处路径（WorkingDirectory、HMAC 环境变量、ExecStart）默认写死 `/opt/cipherbox`。部署在别处（如布局 A 的家目录）**必须先替换**，否则服务起不来（`status=203` 或日志报找不到密钥文件）：
 
-# 2.（推荐）专用服务账户
+```bash
+cd <你的仓库位置>     # 例如 /home/vodserver/github-src/cipher-box
+sudo sed -i "s|/opt/cipherbox|$PWD|g" deploy/cipherbox-server.service
+grep -n 'cipherbox' deploy/cipherbox-server.service   # 核对三处路径已替换
+```
+
+```bash
+# ── 布局 B（/opt + 专用账户）────────────────────────────────────────────
+sudo cp -r <仓库> /opt/cipherbox                        # 且已按第 0 节迁移运行状态
 sudo useradd -r -s /usr/sbin/nologin cipherbox
 sudo chown -R cipherbox:cipherbox /opt/cipherbox
 sudo sed -i 's/^# User=cipherbox/User=cipherbox/; s/^# Group=cipherbox/Group=cipherbox/' \
   /opt/cipherbox/deploy/cipherbox-server.service
+# 部署/后续运维都以服务账户身份：sudo -u cipherbox ...
 
-# 3. 启用
-sudo cp /opt/cipherbox/deploy/cipherbox-server.service /etc/systemd/system/
+# ── 布局 A（家目录）────────────────────────────────────────────────────
+# 服务以部署用户运行：取消 unit 里 User=/Group= 两行注释并改成你的用户名
+# sudo sed -i 's/^# User=cipherbox/User=vodserver/; s/^# Group=cipherbox/Group=vodserver/' \
+#   deploy/cipherbox-server.service
+
+# ── 启用（两种布局相同）───────────────────────────────────────────────
+sudo cp deploy/cipherbox-server.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now cipherbox-server
 systemctl status cipherbox-server
@@ -154,6 +166,7 @@ server/.venv/bin/python -m pytest server/tests -q        # 53 passed（Ubuntu 24
 | 现象 | 处理 |
 |---|---|
 | 浏览器访问 `https://<IP>:8443/` 返回 `{"detail":"Not Found"}` | **正常**——这是纯 API 服务，没有网页。`/` 未定义路由即 404；能收到这个 JSON 恰好证明 TLS 和跨机器访问是通的。健康检查用 `/health` |
+| systemd 服务起不来（status=203）或报找不到密钥文件 | `cipherbox-server.service` 内三处路径默认写死 `/opt/cipherbox`，与实际部署位置不一致——按 systemd 小节第 0 步 sed 替换后 `daemon-reload` 重启 |
 | 客户端（浏览器/Agent）报证书校验失败 | 证书默认 SAN 只有 localhost/127.0.0.1。双机部署必须 `--force --san IP:<服务器IP>` 重签并重启服务，再把 `ca.crt` 分发给客户端 |
 | `curl astral.sh` 超时装不上 uv | 手动从 GitHub release 下载 uv 二进制放 `~/.local/bin/`，或代理后重试（安装器自带备用下载地址，失败会自动切换） |
 | venv 步骤 404 / 下载慢 | 确认 `UV_PYTHON_INSTALL_MIRROR` 指向 npmmirror（脚本默认已设；勿用 TUNA——它不同步 python-build-standalone） |
