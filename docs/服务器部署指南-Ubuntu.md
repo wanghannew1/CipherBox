@@ -119,12 +119,11 @@ sudo sed -i 's/^# User=cipherbox/User=cipherbox/; s/^# Group=cipherbox/Group=cip
 # 部署/后续运维都以服务账户身份：sudo -u cipherbox ...
 
 # ── 布局 A（家目录）────────────────────────────────────────────────────
-# 服务以部署用户运行：取消 unit 里 User=/Group= 两行注释并改成你的用户名
-# sudo sed -i 's/^# User=cipherbox/User=vodserver/; s/^# Group=cipherbox/Group=vodserver/' \
-#   deploy/cipherbox-server.service
+# 用家目录版模板（以真实部署为例，安装前 sed 替换仓库路径）：
+sudo cp deploy/cipherbox-server.service.home /etc/systemd/system/cipherbox-server.service
+# 或对主模板做同等的 sed 替换。服务以部署用户运行：User=<你的用户名>。
 
 # ── 启用（两种布局相同）───────────────────────────────────────────────
-sudo cp deploy/cipherbox-server.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now cipherbox-server
 systemctl status cipherbox-server

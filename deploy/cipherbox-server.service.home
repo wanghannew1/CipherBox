@@ -1,0 +1,39 @@
+# =============================================================================
+# deploy/cipherbox-server.service.home — systemd 自启单元（布局 A：家目录部署）
+#
+# 适用于《服务器部署指南-Ubuntu》布局 A：仓库部署在你的家目录、以你的日常
+# 用户运行服务。本模板以实际验证过的部署为例：
+#   部署路径: /home/vodserver/github-src/cipher-box
+#   运行账户: vodserver
+#
+# ⚠️ 安装前改两处路径（WorkingDirectory 和 ExecStart 中的仓库路径已一致，
+#    Environment 的 HMAC 密钥路径是独立一行，最容易漏）：
+#
+#   cd <你的仓库位置>
+#   sudo sed -i "s|/home/vodserver/github-src/cipher-box|$PWD|g" \
+#     deploy/cipherbox-server.service.home
+#   sudo cp deploy/cipherbox-server.service.home /etc/systemd/system/cipherbox-server.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now cipherbox-server
+#
+# 与布局 B（/opt + 专用账户，见 deploy/cipherbox-server.service）二选一。
+# =============================================================================
+[Unit]
+Description=CipherBox key/audit server (HTTPS 8443)
+After=network.target
+
+[Service]
+Type=simple
+User=vodserver
+Group=vodserver
+WorkingDirectory=/home/vodserver/github-src/cipher-box
+Environment=CIPHERBOX_HMAC_KEY_FILE=/home/vodserver/github-src/cipher-box/server/audit-hmac.key
+ExecStart=/home/vodserver/github-src/cipher-box/server/.venv/bin/python -m uvicorn server.app:create_app --factory --host 0.0.0.0 --port 8443 --ssl-certfile server/certs/server.crt --ssl-keyfile server/certs/server.key
+Restart=on-failure
+RestartSec=3
+# 基础加固
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
