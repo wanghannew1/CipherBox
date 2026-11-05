@@ -178,3 +178,30 @@
 - **选项 B（FOKS-TROT 驱动路线）出局**：上游（毕设单作者）不会修复，自修复成本=重写核心
 - Hades 规则 PoC：同为研究级无签名驱动，风险等级重新评估——如继续 PoC **必须 VM 内进行**（本机不再做内核驱动实测）
 - **决策收敛：维持现架构（选项 D）交付**；驱动级管控方向若业务坚持，走商业 SDK 采购评估（EaseFilter 类，有支持责任）而非开源研究驱动
+
+
+## 13.1 替代路径：手动建 VM + VM 内一键测试脚本（2026-11-05 补充）
+
+> 背景：自动化 VM 管线（Hyper-V PowerShell + autounattend + PowerShell Direct）在本机环境反复受阻（VM 卡死×2 / 提权通道多次死亡 / PSDirect 阻塞）。**务实替代：手动建 VM + VM 内直接跑测试脚本**。
+
+### 手动建 VM（Hyper-V 管理器，约 10 分钟）
+1. Hyper-V 管理器 → 新建 → 虚拟机：Generation **1 或 2 均可**、2 vCPU、4GB、60GB 动态 VHDX
+2. 挂载 Windows 10 x64 ISO（`C:\Users\22419\Downloads\iso\zh-cn_windows_10_business_editions_version_22h2_*.iso`）
+3. 正常安装 Windows（跳过密钥），装完进入桌面
+4. 开测试签名（管理员 CMD）：`bcdedit /set testsigning on` + 重启（桌面右下角"测试模式"水印 = 生效）
+
+### VM 内一键测试（FOKS-TROT 实测脚本已备好）
+测试脚本已就位于主机：`C:\minifilter-poc\test-foks-trot.ps1`（语法已校验）。
+拷入 VM 后**以管理员 PowerShell 执行**：
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force
+C:\minifilter-poc\test-foks-trot.ps1 的副本路径   # 或直接 .\test-foks-trot.ps1
+```
+
+脚本自动完成：测试签名确认 → FOKS-TROT 安装（`packages\FOKS-TROT-setup.exe`；静默失败会弹 GUI 向导，手动点完）→ 驱动服务启动 → `C:\Desktop` 机密目录写入测试（notepad 授权写入）→ **落盘密文验证**（明文标记不得出现于磁盘字节）→ 非授权读取验证 → 非授权修改拒绝验证 → 输出 `RESULT: N pass / M fail` 汇总。
+
+**注意**：VM 内测试驱动时，驱动会接管 `C:\Desktop` 的文件 I/O 视图（TxF 事务 + 双缓冲），PowerShell 的 .NET 字节读取可能报"事务上下文"错误——这是驱动正常工作的证据，用 `cmd /c type` 验证内容即可。
+
+### 评估记录
+测试完成后把 `RESULT` 行 + 过程现象填入 §8 记录表 FOKS-TROT 行，按 §9 决策输出判定。
