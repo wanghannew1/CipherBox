@@ -100,3 +100,60 @@
 - 测试签名模式需重启 + 桌面水印（测试机可接受）
 - VM 内不放任何真实业务数据；网络默认隔离（仅测试需要时装 NAT）
 - RealBlindingEDR 类攻击工具**不纳入**测试（合规）
+
+
+## 12. 社区/专家评估与经验借鉴（2026-11-05 调研补充）
+
+### 12.1 FOKS-TROT 的 12 个 GitHub Issues（真实用户踩坑）
+
+| Issue | 内容 | 对 CipherBox 的启示 |
+|---|---|---|
+| #46 / #58 | **LengthReturned < 0 蓝屏** / 特定文件解密蓝屏 | 内核加密路径有真实蓝屏案例——自研/复用必须处理 LengthReturned 负值与解密异常分支 |
+| #59 | 双缓冲实现被质疑：只替换 FileObject->SectionObjectPointer "对操作系统来说是一个错误，项目并没实现双缓存" | FOKS-TROT 的核心卖点（双缓冲）实现本身存疑——借鉴其思路时需按 DataSecure 的 Shadow SOP 正确做法重做 |
+| #55 | **非配置进程修改密文无法拦截**（安全缺陷） | 未授权进程的密文修改拦截存在缺口——若复用必须补此分支 |
+| #52 | 支持 Win11 吗？（作者未答） | Win11 兼容性未经验证 |
+| #47 | 文件尾部乱码 | 4KB 标识尾方案的已知缺陷（断电场景作者也自认应改文件头） |
+| #53 | 用户在求商用版本 | 社区有需求，无商用化承接 |
+
+**作者自述定位（README/Foreword）**："我希望这个项目成为各位同僚开发时的参考，而非一个直接用的产品"——作者本人承认架构性缺陷（密文挪用与文件大小扩展混在一起、写尾笨拙），排除直接生产使用，定位为**参考实现**。
+
+### 12.2 DataSecure（吾爱破解 2026-09 帖）——借鉴价值最高的中文工程经验
+
+52pojie 的 DataSecure 工程帖覆盖了 FOKS-TROT 没讲透的全部工程难点：
+
+1. **双缓冲的正确实现**：不是换 SOP 内存那么简单——授权/非授权进程分别挂 Origin SOP（明文页）与 Shadow SOP（密文页），同一 FCB/磁盘数据；卸载前两套 Cache 都要 Purge（明文页泄露=密钥还在内存）
+2. **Office/WPS 兼容六大坑**（"透明加密 80% 工作量在和 Cache Manager、和 Office 保存协议讲和"）：
+   - Word tmp+rename 保存路径（Create 时扩展名不是目标扩展名 → 要在 SetInformation rename 上补刀）
+   - ppt/xls 打开即空写（Create 时加密得空密文 → 加密推迟到 Close）
+   - WRITE_THROUGH 时 NTFS 提前改 Fcb->FileSize（过滤层记录应用以为的长度）
+   - 小于 AES 块的 Cached 写（记事本 3 字保存 → 扩写+记真实长度+Query 时撒谎）
+   - 分页 I/O 的 Requestor 不是 Word（需判断 StreamHasLiveAuthorizedProcess）
+   - 重启后明文 Cache 残留（Create 发现有尾且已有 DataSectionObject → Flush+Purge 再读）
+3. **进程完整性校验**（白名单不够：防 DLL 注入进授权进程读明文缓冲 + 防 .text 被改钩保存）
+
+**借鉴动作**：若二期走驱动路线，DataSecure 帖的六大坑清单直接作为**设计评审 checklist**。
+
+### 12.3 Hades-Windows 社区状态
+
+- 404Starlink 收录、315 commits、多台无盘机器稳定运行（HIDS 采集场景）
+- 但其 HIPS 目录拦截能力的**办公桌面场景稳定性未验证**（项目定位安全研究/服务器审计）
+- 驱动无微软签名（需测试模式或关闭签名认证——与 FOKS-TROT 相同的部署门槛）
+
+### 12.4 学术/商业参考补充
+
+- Brno 大学 2019 论文（Transparent Encryption with Windows Minifilter Driver）：CM/VMM 交互、FSD 锁、文件视图修改的学术级阐述
+- EaseFilter SDK（商业）：成品 minifilter（监控/访问控制/透明加密/进程保护），"无驱动开发经验也能一天内构建"——采购路线的实物
+- ETEFS/FolderCrypt（商业）：同类
+
+### 12.5 综合判定更新
+
+结合社区评估，三选项的信心度修正：
+
+| 选项 | 信心度 | 依据 |
+|---|---|---|
+| D 维持现架构 | 高 | 不依赖任何研究级驱动 |
+| A 叠加 Hades 目录访问 | 中 | 能力现成（Apache-2.0）但研究级稳定性+无签名 |
+| B FOKS-TROT 深度加固 | 中低 | 核心能力实测通过 + 但蓝屏案例/双缓冲实现质疑/另存为缺口三项需先补 |
+| C 采购 EaseFilter 类 SDK | 中高（花钱买确定性） | 成品驱动 + 完整功能面 + 商业支持 |
+
+**建议**：一期维持现架构交付；二期驱动路线若立项，**先做 Hades 规则 PoC（低成本验证目录管控能力）+ 同步采购评估 EaseFilter**（两条腿走路，用评估结果决定自研还是采购）。
