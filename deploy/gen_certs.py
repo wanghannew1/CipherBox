@@ -40,8 +40,17 @@ _MINIMAL_CNF = """\
 [ req ]
 distinguished_name = dn
 prompt = no
+x509_extensions = v3_ca
 [ dn ]
 CN = cipherbox
+# A self-signed root MUST carry basicConstraints=CA:TRUE: without it strict
+# verifiers (OpenSSL 3.x, and every client pinning ca.crt) reject the chain
+# with "invalid CA certificate".
+[ v3_ca ]
+basicConstraints = critical, CA:TRUE
+keyUsage = critical, keyCertSign, cRLSign
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
 """
 
 _EXTFILE_TMPL = """\
@@ -49,6 +58,7 @@ subjectAltName = {sans}
 basicConstraints = CA:FALSE
 keyUsage = digitalSignature, keyEncipherment
 extendedKeyUsage = serverAuth
+authorityKeyIdentifier = keyid,issuer
 """
 
 
