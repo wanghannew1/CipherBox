@@ -5,6 +5,14 @@ Resident program: ``python -m agent``.  Startup order is plan-mandated
 then the controlled-open named-pipe server — before any controlled open or
 watcher encryption can run.
 
+Controlled opens carry the todo-17 interceptor link: each session spawns a
+link worker under LibreOffice's python (see :mod:`agent.session_link`) that
+registers the forced-encrypt interceptor BEFORE the document loads.  The
+worker fetches the current master key per forced save and reports interceptor
+audits over the link pipe (``LINK_PIPE_NAME``); the key handler applies the
+todo-11 rule (online refresh, cache fallback), the audit handler flows into
+the resident :class:`AuditReporter`.
+
 Components are the existing verified modules, wired here with their injected
 callbacks; this file owns NO crypto/UNO/session logic of its own:
 
@@ -21,6 +29,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import dataclasses
+import json
 import os
 import signal
 import sys
@@ -34,13 +43,15 @@ from agent.config import AgentConfig, ConfigError, LoadedConfig, load_config
 from agent.container import CbxContainer, ContainerError
 from agent.controlled import LaunchError, launch_soffice, wait_document_close
 from agent.encryptor import Encryptor
-from agent.ipc import PIPE_NAME, OpenPipeServer
+from agent.ipc import LINK_PIPE_NAME, PIPE_NAME, OpenPipeServer
 from agent.key_manager import CachedKey, KeyManager, KeyManagerError
 from agent.opener import CBX_SUFFIX, ControlledOpener, SessionStore, SingleInstanceMutex
+from agent.session_link import LinkHandle, LinkSpec, queue_dir_for, spawn
 from agent.uno_driver import UnoDriver
 from agent.watcher import ProtectedFolderWatcher
 
 AGENT_MUTEX_NAME = "Local\\CipherBoxAgentResident"
+LINK_QUEUE_FILE = "link-audit.jsonl"
 
 
 def default_recovery(rt: Runtime) -> RecoveryReport:
@@ -70,6 +81,106 @@ class Runtime:
     watcher: ProtectedFolderWatcher | None
     pipe_server: OpenPipeServer
     recovery_runner: Callable[["Runtime"], RecoveryReport] = default_recovery
+    link_pipe_server: OpenPipeServer | None = None  # key/audit for the link worker
+
+
+# ---------------------------------------------------------------------------
+# link-worker channel handlers (todo 17 ①: per-save key fetch + audit route)
+# ---------------------------------------------------------------------------
+
+def make_key_handler(key_manager: KeyManager) -> Callable[[dict], dict]:
+    """Current master key for the interceptor's per-save fetch.
+
+    Applies the todo-11 rule: online refresh first (server unreachable ->
+    DPAPI cache fallback inside ``ensure_keys``), then the resident current
+    key.  Failures raise; the pipe boundary turns them into
+    ``{"ok": false}`` and the worker fail-closes the save.
+    """
+
+    def handle_key(_request: dict) -> dict:
+        key_manager.ensure_keys(online=True)
+        current = key_manager.current_key()
+        return {"ok": True, "key": current.key, "version": current.version}
+
+    return handle_key
+
+
+def make_audit_handler(audit: AuditReporter) -> Callable[[dict], dict]:
+    """Interceptor audit event -> resident AuditReporter (server/queue)."""
+
+    def handle_audit(request: dict) -> dict:
+        action = request.get("action")
+        file_hash = request.get("file_hash")
+        ok = request.get("ok")
+        key_version = request.get("key_version")
+        if not isinstance(action, str) or not action:
+            return {"ok": False, "error": "audit event requires a non-empty action"}
+        if not isinstance(file_hash, str) or not isinstance(ok, bool):
+            return {"ok": False, "error": "audit event requires file_hash:str + ok:bool"}
+        if key_version is not None and not isinstance(key_version, int):
+            return {"ok": False, "error": "key_version must be int or null"}
+        audit.report(action, file_hash, key_version, ok)
+        return {"ok": True}
+
+    return handle_audit
+
+
+def replay_link_audit_queue(rt: Runtime) -> int:
+    """Replay the volume-side fallback queue the link worker wrote while the
+    agent was unreachable (todo 17 ①).  ``AuditReporter.report`` queues on
+    server failure itself, so replaying the file then deleting it cannot lose
+    events.  Returns the replayed count."""
+    queue_dir = queue_dir_for(rt.config.temp_root)
+    path = os.path.join(queue_dir, LINK_QUEUE_FILE)
+    if not os.path.isfile(path):
+        return 0
+    count = 0
+    with open(path, "r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(event, dict):
+                continue
+            rt.audit.report(
+                str(event.get("action") or ""),
+                str(event.get("file_hash") or ""),
+                event.get("key_version"),
+                bool(event.get("ok", True)))
+            count += 1
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    return count
+
+
+def make_interceptor_attacher(config: AgentConfig) -> Callable[[str, str], LinkHandle]:
+    """Build the opener's ``attach_interceptor`` callback (one per session).
+
+    Spawns the link worker (LibreOffice python), gates on its hard ordering
+    — ``await_loaded`` returns only after interception is confirmed active
+    and the document is loaded — and surfaces any :class:`LinkError` to the
+    opener, which then aborts the session fail-closed.
+    """
+    spec_queue_dir = queue_dir_for(config.temp_root)
+
+    def attach(pipe_name: str, doc_path: str) -> LinkHandle:
+        print(f"[agent] link: registering interceptor for {os.path.basename(doc_path)}")
+        handle = spawn(LinkSpec(
+            soffice_pipe=pipe_name,
+            doc_path=doc_path,
+            agent_pipe=LINK_PIPE_NAME,
+            queue_dir=spec_queue_dir))
+        frames = handle.await_loaded()
+        print(f"[agent] link: interception active on {frames} frame(s), document loaded")
+        return handle
+
+    return attach
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +228,7 @@ def _run_controlled_open(target: str, deps: OpenDeps) -> dict:
         session_store=SessionStore(deps.config.session_dir),
         tmp_root=deps.config.temp_root,
         launch_soffice=launch_soffice,
+        attach_interceptor=make_interceptor_attacher(deps.config),
         wait_document_close=wait_document_close,
         re_encrypt=lambda tmp_path, cbx_path, password:
             deps.uno_driver.encrypt_to_cbx(tmp_path, cbx_path, password),
@@ -163,9 +275,13 @@ def build_runtime(loaded: LoadedConfig, *, with_watcher: bool, pipe_name: str = 
         make_open_handler(OpenDeps(
             config=cfg, key_manager=key_manager, uno_driver=uno_driver, audit=audit)),
         pipe_name)
+    link_pipe_server = OpenPipeServer({
+        "key": make_key_handler(key_manager),
+        "audit": make_audit_handler(audit),
+    }, LINK_PIPE_NAME)
     return Runtime(
         config=cfg, key_manager=key_manager, audit=audit, uno_driver=uno_driver,
-        watcher=watcher, pipe_server=pipe_server)
+        watcher=watcher, pipe_server=pipe_server, link_pipe_server=link_pipe_server)
 
 
 def run_resident(rt: Runtime) -> None:
@@ -182,9 +298,19 @@ def run_resident(rt: Runtime) -> None:
     dispatched = rt.audit.flush()  # 3. 联网后补报本地暂存审计（todo 15）
     if dispatched:
         print(f"[agent] audit: replayed {dispatched} queued event(s)")
+    replayed = replay_link_audit_queue(rt)  # 3b. 卷内链接审计队列补报（todo 17①）
+    if replayed:
+        print(f"[agent] audit: replayed {replayed} link-queue event(s)")
     if rt.watcher is not None:  # 4. watcher thread + startup scan
         rt.watcher.start()
         print(f"[agent] watcher: started on {rt.config.protected_dir}")
+    link_thread = None  # 4b. link pipe (key/audit for the link worker)
+    if rt.link_pipe_server is not None:
+        link_thread = threading.Thread(
+            target=rt.link_pipe_server.serve_forever, name="cipherbox-link-pipe",
+            daemon=True)
+        link_thread.start()
+        print(f"[agent] link pipe: listening on {rt.link_pipe_server.pipe_name}")
     try:
         print(f"[agent] pipe: listening on {rt.pipe_server.pipe_name}")  # 5. pipe server
         rt.pipe_server.serve_forever()
@@ -192,6 +318,11 @@ def run_resident(rt: Runtime) -> None:
         if rt.watcher is not None:
             rt.watcher.stop()
             print("[agent] watcher: stopped")
+        if rt.link_pipe_server is not None:
+            rt.link_pipe_server.stop()
+            if link_thread is not None:
+                link_thread.join(timeout=5.0)
+            print("[agent] link pipe: closed")
         rt.pipe_server.close()
         print("[agent] pipe: closed")
 

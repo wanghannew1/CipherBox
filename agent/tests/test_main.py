@@ -17,10 +17,23 @@ from pathlib import Path
 
 import pytest
 
-from agent.__main__ import Runtime, main, once_startup, run_resident, serve_resident
+from agent.__main__ import (
+    LINK_QUEUE_FILE,
+    Runtime,
+    main,
+    make_audit_handler,
+    make_interceptor_attacher,
+    make_key_handler,
+    once_startup,
+    replay_link_audit_queue,
+    run_resident,
+    serve_resident,
+)
 from agent.cleanup import RecoveryReport
 from agent.config import AgentConfig
+from agent.ipc import LINK_PIPE_NAME
 from agent.key_manager import CachedKey, KeySet, ServerUnreachableError, dpapi_encrypt
+from agent.session_link import LinkSpec, queue_dir_for
 
 PIPE_NAME = "fake-open-pipe"
 
@@ -256,3 +269,137 @@ def _client_json(tmp_path: Path) -> dict:
         "keycache": "config-relative/keycache.dat",
         "audit_queue": r"S:\appdata-ish\audit-queue.json",
     }
+
+
+# ---------------------------------------------------------------------------
+# link-worker channel (todo 17 ① wiring)
+# ---------------------------------------------------------------------------
+
+class KeyedKeyManager:
+    """ensure_keys/current_key fake returning a fixed current key."""
+
+    def __init__(self, version: int = 3, key: str = "k3") -> None:
+        self.version = version
+        self.key = key
+        self.ensure_calls: list[bool] = []
+
+    def ensure_keys(self, online: bool = True):
+        self.ensure_calls.append(online)
+
+    def current_key(self):
+        return CachedKey(version=self.version, key=self.key)
+
+
+class TestLinkKeyHandler:
+    def test_returns_current_key_after_online_refresh(self):
+        km = KeyedKeyManager()
+        handler = make_key_handler(km)
+        response = handler({"cmd": "key"})
+        assert response == {"ok": True, "key": "k3", "version": 3}
+        assert km.ensure_calls == [True]  # todo 11 rule: online refresh first
+
+
+class TestLinkAuditHandler:
+    def test_valid_event_flows_into_audit_reporter(self):
+        recorded: list[tuple] = []
+
+        class Audit:
+            def report(self, action, file_hash, key_version, ok, error=None):
+                recorded.append((action, file_hash, key_version, ok, error))
+
+        handler = make_audit_handler(Audit())
+        assert handler({"cmd": "audit", "action": "encrypt",
+                        "file_hash": "ab" * 32, "key_version": None,
+                        "ok": True}) == {"ok": True}
+        assert recorded == [("encrypt", "ab" * 32, None, True, None)]
+
+    def test_missing_action_rejected(self):
+        handler = make_audit_handler(_NoopAudit())
+        response = handler({"cmd": "audit", "action": "", "file_hash": "x", "ok": True})
+        assert response["ok"] is False and "action" in response["error"]
+
+    def test_bad_types_rejected(self):
+        handler = make_audit_handler(_NoopAudit())
+        assert handler({"cmd": "audit", "action": "encrypt",
+                        "file_hash": 7, "ok": "yes"})["ok"] is False
+        assert handler({"cmd": "audit", "action": "encrypt",
+                        "file_hash": "x", "ok": True,
+                        "key_version": "v3"})["ok"] is False
+
+
+class _NoopAudit:
+    def report(self, *args, **kwargs) -> bool:
+        return True
+
+
+class TestReplayLinkAuditQueue:
+    def test_replays_and_deletes_queue_file(self, tmp_path: Path):
+        config = fake_config(str(tmp_path))
+        queue_dir = queue_dir_for(config.temp_root)
+        os.makedirs(queue_dir, exist_ok=True)
+        path = os.path.join(queue_dir, LINK_QUEUE_FILE)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"action": "export_plaintext", "file_hash": "ab" * 32,
+                                 "key_version": None, "ok": True}) + "\n")
+            fh.write("not json at all\n")
+            fh.write(json.dumps({"action": "encrypt", "file_hash": "cd" * 32,
+                                 "key_version": 2, "ok": False}) + "\n")
+
+        recorded: list[tuple] = []
+
+        class Audit:
+            def report(self, action, file_hash, key_version, ok, error=None):
+                recorded.append((action, file_hash, key_version, ok))
+
+        rt = Runtime(config=config, key_manager=None, audit=Audit(), uno_driver=None,
+                     watcher=None, pipe_server=None)
+        count = replay_link_audit_queue(rt)
+
+        assert count == 2  # the garbage line is skipped, never reported
+        assert recorded[0] == ("export_plaintext", "ab" * 32, None, True)
+        assert recorded[1] == ("encrypt", "cd" * 32, 2, False)
+        assert not os.path.exists(path)  # replayed then deleted
+
+    def test_absent_queue_is_zero(self, tmp_path: Path):
+        config = fake_config(str(tmp_path))
+        rt = Runtime(config=config, key_manager=None, audit=_NoopAudit(),
+                     uno_driver=None, watcher=None, pipe_server=None)
+        assert replay_link_audit_queue(rt) == 0
+
+
+class TestInterceptorAttacher:
+    def test_attacher_spawns_link_and_gates_on_loaded(self, tmp_path: Path, monkeypatch):
+        config = fake_config(str(tmp_path))
+        spawned: list[LinkSpec] = []
+
+        class FakeHandle:
+            def await_loaded(self, timeout_s=90.0):
+                return 2
+
+        def fake_spawn(spec: LinkSpec, **kwargs):
+            spawned.append(spec)
+            return FakeHandle()
+
+        monkeypatch.setattr("agent.__main__.spawn", fake_spawn)
+        attach = make_interceptor_attacher(config)
+        handle = attach("cipherbox-controlled-uuid-1", r"S:\.cipherbox-tmp\u-1\a.docx")
+
+        assert isinstance(handle, FakeHandle)
+        spec = spawned[0]
+        assert spec.soffice_pipe == "cipherbox-controlled-uuid-1"
+        assert spec.doc_path == r"S:\.cipherbox-tmp\u-1\a.docx"
+        assert spec.agent_pipe == LINK_PIPE_NAME
+        assert spec.queue_dir == os.path.join(config.temp_root, "audit-queue")
+
+    def test_attach_failure_propagates_link_error(self, tmp_path: Path, monkeypatch):
+        from agent.session_link import LinkError
+
+        config = fake_config(str(tmp_path))
+
+        def failing_spawn(spec, **kwargs):
+            raise LinkError("controlled soffice unreachable")
+
+        monkeypatch.setattr("agent.__main__.spawn", failing_spawn)
+        attach = make_interceptor_attacher(config)
+        with pytest.raises(LinkError):
+            attach("cipherbox-controlled-uuid-1", r"S:\.cipherbox-tmp\u-1\a.docx")

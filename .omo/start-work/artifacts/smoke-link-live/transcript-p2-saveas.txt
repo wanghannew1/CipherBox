@@ -1,0 +1,21 @@
+smoke_link_live phase 2; products in C:\Users\User\AppData\Local\Temp\cipherbox-smoke6-out
+
+=== P2 forced SaveAs -> CFB + engine round trip ===
+PASS  P2 plaintext loads 
+PASS  P2 encrypt audit fired exactly once [('encrypt', 'b5ced8945bf4a24b7223b26fc28deb0c613f95c5ff859460c97327dc38790179', None, True)]
+PASS  P2 encrypt audit ok=True 
+PASS  P2 encrypt audit carries a real content sha256 hash='b5ced8945bf4a24b7223b26fc28deb0c613f95c5ff859460c97327dc38790179'
+PASS  P2 doc medium switched to the target location='file:///C:/Users/User/AppData/Local/Temp/cipherbox-smoke6-out/p2/out/smoke-forced.docx'
+PASS  P2 engine encrypt() ran during forced SaveAs 
+PASS  P2 source plaintext untouched (byte-identical) 
+PASS  P2: product written C:\Users\User\AppData\Local\Temp\cipherbox-smoke6-out\p2\out\smoke-forced.docx
+PASS  P2: OLE/CFB magic (not plaintext ZIP) 10240 bytes, magic=d0cf11e0a1b11ae1
+PASS  P2: CFB exposes the 5 engine streams ['\x06DataSpaces/DataSpaceInfo/CipherBoxDataSpace', '\x06DataSpaces/DataSpaceMap', '\x06DataSpaces/TransformInfo/CipherBoxTransform/\x06Primary', '\x06DataSpaces/Version', 'EncryptedPackage']
+PASS  P2: engine instantiates 
+PASS  P2: readEncryptionInfo accepts container 
+PASS  P2: generateEncryptionKey(smoke password) accepted 
+PASS  P2: decrypt() returns true 
+PASS  P2: payload is the OOXML ZIP (PK magic) 5362 bytes
+PASS  P2: marker survives the engine round trip 
+
+RESULT: PASS (phase 2)

@@ -1,15 +1,18 @@
 """Agent-side controlled-open closed loop (plan todo 14).
 
 Decrypts a ``.cbx`` to a temp cleartext under ``S:\.cipherbox-tmp\<uuid>\``,
-launches an independent GUI LibreOffice (controlled profile, Job Object bound),
-waits for document-level close (XModel dispose/close event), re-encrypts on
-change, then deletes the temp cleartext and the session record.
+launches an independent GUI LibreOffice WITHOUT the document (controlled
+profile, Job Object bound), attaches the interceptor link worker (todo 17:
+forced-encrypt interception registered BEFORE the document loads — link
+failure aborts the session fail-closed), waits for the link's document-level
+close, kills the GUI via the job, re-encrypts on change, then deletes the
+temp cleartext and the session record.
 
 All LibreOffice/UNO interaction is injected via callbacks so the module can be
 unit-tested without soffice.  Windows-only (Job Object, DPAPI, named mutex).
 
 Plan references: todo 10 (agent/container.py decrypt), todo 11 (key cache),
-todo 13 (encryptor re-encrypt).
+todo 13 (encryptor re-encrypt), todo 14/17 (link hard ordering).
 """
 
 from __future__ import annotations
@@ -295,10 +298,18 @@ class ControlledOpener:
     Callbacks (injected; no soffice dependency in this module):
 
         launch_soffice(tmp_path, profile, pipe_name, env) -> int
-            Start GUI soffice on the temp cleartext; return its PID.
+            Start GUI soffice WITHOUT the document (the link loads it); PID.
+        attach_interceptor(pipe_name, tmp_path) -> link handle
+            Spawn the per-session link worker (todo 17): registers the
+            forced-encrypt interceptor on every frame, then loads the temp
+            plaintext.  The handle needs ``wait_close() -> dict`` (final
+            ``{"event": "closed", "crashed": bool}``) and ``kill()``.
+            REQUIRED in production: without it the document would open with
+            no interception — the opener only runs without it on the
+            unit-test path.
         wait_document_close(pid, timeout_s) -> bool
-            Block until the document is closed (XModel dispose/close), or
-            timeout.  True = closed cleanly, False = timeout/killed.
+            Legacy/test fallback: block on the soffice PROCESS (used only
+            when no link handle was attached).  True = exited, False = lost.
         re_encrypt(tmp_path, cbx_path, password) -> None
             Re-encrypt the (possibly edited) cleartext back to .cbx.
     """
@@ -312,6 +323,7 @@ class ControlledOpener:
         session_store: SessionStore,
         tmp_root: str = TMP_ROOT,
         launch_soffice: Callable[[str, str, str, dict], int] | None = None,
+        attach_interceptor: Callable[[str, str], object] | None = None,
         wait_document_close: Callable[[int, float], bool] | None = None,
         re_encrypt: Callable[[str, str, str], None] | None = None,
         audit: Callable[[str, str, int | None, bool, str | None], None] | None = None,
@@ -322,6 +334,7 @@ class ControlledOpener:
         self.session_store = session_store
         self.tmp_root = tmp_root
         self.launch_soffice = launch_soffice
+        self.attach_interceptor = attach_interceptor
         self.wait_document_close = wait_document_close
         self.re_encrypt = re_encrypt
         self.audit = audit
@@ -333,12 +346,14 @@ class ControlledOpener:
         cbx_path: str,
         *,
         launch_soffice: Callable[[str, str, str, dict], int] | None = None,
+        attach_interceptor: Callable[[str, str], object] | None = None,
         wait_document_close: Callable[[int, float], bool] | None = None,
         re_encrypt: Callable[[str, str, str], None] | None = None,
         audit: Callable[[str, str, int | None, bool, str | None], None] | None = None,
     ) -> OpenResult:
-        """Full closed loop: decrypt -> launch LO -> wait close -> re-encrypt -> cleanup."""
+        """Full closed loop: decrypt -> launch LO -> intercept -> wait close -> re-encrypt -> cleanup."""
         launch = launch_soffice or self.launch_soffice
+        attach = attach_interceptor or self.attach_interceptor
         wait = wait_document_close or self.wait_document_close
         reenc = re_encrypt or self.re_encrypt
         aud = audit or self.audit
@@ -399,24 +414,55 @@ class ControlledOpener:
             # Job Object failure is non-fatal for open; continue without it.
             job = None
 
+        # --- attach the interceptor link (todo 14 hard ordering) --------
+        # The link worker registers the forced-encrypt interceptor on every
+        # frame and only then loads the temp plaintext.  Registration failure
+        # is session-fatal (fail-closed): no un-intercepted document window
+        # may survive, so the GUI is job-killed and every trace is deleted.
+        link = None
+        if attach is not None:
+            try:
+                link = attach(pipe_name, tmp_path)
+            except Exception as exc:
+                if job is not None:
+                    job.close()  # KILL_ON_JOB_CLOSE kills the soffice we started
+                    job = None
+                self._delete_quiet(tmp_path)
+                self._rmdir_quiet(session_dir)
+                self.session_store.delete(session_id)
+                raise RuntimeError(
+                    f"interceptor link failed; session aborted: {exc}") from exc
+
         # --- wait for document-level close ------------------------------
         closed_cleanly = False
-        if wait is not None:
+        if link is not None:
+            try:
+                closed = link.wait_close()
+                closed_cleanly = not bool(closed.get("crashed", True))
+            except Exception:
+                closed_cleanly = False
+            link.kill()  # guard: the worker exits itself on every normal path
+        elif wait is not None:
             try:
                 closed_cleanly = wait(pid, timeout_s=0)  # 0 = block indefinitely
             except Exception:
                 closed_cleanly = False
 
+        # --- terminate the controlled GUI BEFORE touching the temp ------
+        # On the link path the worker reports document close while the Start
+        # Center (or a wedged soffice) may still hold the temp file; the
+        # KILL_ON_JOB_CLOSE job ends it, then the settle loop waits for the
+        # lock release so the hash/re-encrypt below reads a settled file.
+        if job is not None:
+            job.close()
+            job = None
+
         # --- re-encrypt if changed --------------------------------------
         changed = False
         re_encrypted = False
-        try:
-            with open(tmp_path, "rb") as fh:
-                current = fh.read()
+        current = self._read_settled(tmp_path, plaintext)
+        if current is not None:
             changed = (hashlib.sha256(current).hexdigest() != orig_sha256)
-        except OSError:
-            current = plaintext
-            changed = False
 
         if changed and reenc is not None:
             try:
@@ -431,18 +477,9 @@ class ControlledOpener:
                         self.key_version, False, str(exc))
 
         # --- cleanup: delete temp cleartext + session record ------------
-        try:
-            os.remove(tmp_path)
-        except OSError:
-            pass
-        try:
-            os.rmdir(session_dir)
-        except OSError:
-            pass
+        self._delete_quiet(tmp_path)
+        self._rmdir_quiet(session_dir)
         self.session_store.delete(session_id)
-
-        if job is not None:
-            job.close()
 
         return OpenResult(
             session_id=session_id,
@@ -451,6 +488,42 @@ class ControlledOpener:
             changed=changed,
             re_encrypted=re_encrypted,
         )
+
+    # -- helpers -------------------------------------------------------------
+
+    @staticmethod
+    def _read_settled(path: str, fallback: bytes, attempts: int = 20,
+                      delay_s: float = 0.25) -> bytes | None:
+        """Read the temp plaintext after the controlled GUI was killed: the
+        dying process releases the file lock asynchronously, so a few bounded
+        retries.  None = the temp vanished (nothing to compare/re-encrypt)."""
+        import time
+
+        for attempt in range(attempts):
+            try:
+                with open(path, "rb") as fh:
+                    return fh.read()
+            except FileNotFoundError:
+                return None  # deleted elsewhere: nothing to do
+            except OSError:
+                if attempt == attempts - 1:
+                    return None
+                time.sleep(delay_s)
+        return None
+
+    @staticmethod
+    def _delete_quiet(path: str) -> None:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+    @staticmethod
+    def _rmdir_quiet(path: str) -> None:
+        try:
+            os.rmdir(path)
+        except OSError:
+            pass
 
 
 # ---------------------------------------------------------------------------

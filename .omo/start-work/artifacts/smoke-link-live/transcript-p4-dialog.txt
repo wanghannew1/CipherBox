@@ -1,0 +1,9 @@
+smoke_link_live phase 4; products in C:\Users\User\AppData\Local\Temp\cipherbox-smoke6-out
+
+=== P4 dialog flow (no URL arg) -> fail-closed with key=None ===
+PASS  P4 fail-closed encrypt audit fired exactly once [('encrypt', '', None, False)]
+PASS  P4 audit records ok=False (refusal, not silence) 
+PASS  P4 refusal carries no content hash 
+PASS  P4 nothing written under the guard dir (no dialog escape) []
+
+RESULT: PASS (phase 4)

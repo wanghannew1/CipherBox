@@ -26,6 +26,16 @@ from agent.uno_driver import PIPE_URL, REPO_ROOT, UnoDriver, UnoDriverError
 
 
 class TestSubprocessDelegation:
+    @pytest.fixture(autouse=True)
+    def _lo_python_placeholder(self, tmp_path: Path, monkeypatch):
+        """_resolve_lo_python needs an EXISTING file before the (faked)
+        subprocess.run — point it at a placeholder so these tests do not
+        depend on LibreOffice being installed.  Tests that exercise the
+        resolution itself override this with their own setenv."""
+        placeholder = tmp_path / "lo-python-placeholder.exe"
+        placeholder.write_bytes(b"")
+        monkeypatch.setenv("CIPHERBOX_LO_PYTHON", str(placeholder))
+
     @staticmethod
     def _import_failing_driver(monkeypatch) -> UnoDriver:
         def raise_import_error():

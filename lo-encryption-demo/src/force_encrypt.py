@@ -15,6 +15,7 @@ pyuno process (spike P5).  Requires PyUNO.
 from __future__ import annotations
 
 import hashlib
+import os
 from typing import Any
 
 import uno
@@ -34,6 +35,21 @@ PLAINTEXT_ACTION = "export_plaintext"
 FORCE_ENCRYPT_DISPATCHES = frozenset({
     ".uno:Save", ".uno:SaveAs", ".uno:SaveACopy", ".uno:SaveAll",
 })
+
+# SaveAs family: the target is a NEW location (URL argument when dispatched
+# programmatically, a dialog otherwise).  When the dialog collects the target
+# the interceptor cannot know it at dispatch time, so the safe default is to
+# inject the forced-encrypt payload (worst case: an odd/failed save; never a
+# plaintext escape).
+SAVE_AS_FAMILY = frozenset({".uno:SaveAs", ".uno:SaveACopy"})
+
+# In-place saves: target IS the current medium.  For a controlled-session
+# document that medium is the session temp plaintext -- injecting
+# EncryptionData here would overwrite the temp plaintext with ciphertext and
+# corrupt the session-close re-encrypt.  These dispatches therefore ALWAYS
+# delegate unchanged; persistence of the temp plaintext is the session
+# close's hash-compare + re-encrypt, never the interceptor.
+IN_PLACE_SAVE_DISPATCHES = frozenset({".uno:Save", ".uno:SaveAll"})
 
 # Export/send family: never encryptable via EncryptionData (spike P8 -- none
 # of these slots honours it), so audit as plaintext and pass through.
@@ -116,12 +132,29 @@ class ForceEncryptInterceptor(unohelper.Base,
         self._registered = False
         self._password_provider = None
         self._audit_reporter = None
+        self._guard_url = None
 
     # -- wiring ---------------------------------------------------------
 
     def attach(self, frame) -> None:
         """Bind to a frame: the wrapped provider + the interception point."""
         self._frame = frame
+
+    def set_guard(self, directory: str) -> None:
+        """Fail-closed guard directory (the session temp dir): OOXML/save
+        targets resolved to a URL under it are REFUSED (audited ok=False)
+        instead of written there --堵 LO SaveAs/Export 对话框把副本落进会话
+        scratch 目录后被收尾清理蒸发 (todo 17 ③ temp 规则).
+        """
+        if not directory:
+            self._guard_url = None
+            return
+        try:
+            url = uno.systemPathToFileUrl(os.path.abspath(directory))
+        except Exception:
+            self._guard_url = None
+            return
+        self._guard_url = url.replace("\\", "/").rstrip("/").lower() + "/"
 
     def set_password_provider(self, provider) -> None:
         self._password_provider = provider
@@ -218,17 +251,40 @@ class ForceEncryptInterceptor(unohelper.Base,
     # -- internal dispatch paths ---------------------------------------------
 
     def _dispatch_save(self, url, arguments) -> None:
-        extension = _target_extension(self._save_target_url(arguments))
-        if extension == "cbx":
-            # P7: a CipherBox-bound medium keeps Password+EncryptionData;
-            # .uno:Save delegated unchanged stays CFB, never plaintext.
-            self._delegate(url, arguments)
-            return
-        if extension not in OOXML_EXTENSIONS:
-            # .odt/.pdf/.txt/... or no resolvable target: plaintext family.
+        # Resolution order (todo 17 ③ family routing):
+        # 1. explicit URL argument -> decide by that target;
+        # 2. no URL argument (dialog flows) -> by dispatch family.
+        url_arg = self._target_url_arg(arguments)
+        if url_arg:
+            extension = _target_extension(url_arg)
+            if extension == "cbx":
+                # P7: a CipherBox-bound medium keeps Password+EncryptionData;
+                # delegated unchanged it stays CFB, never plaintext.
+                self._delegate(url, arguments)
+                return
+            if self._under_guard(url_arg):
+                # temp escape refused: no copy of the document may land in the
+                # session scratch dir where close/cleanup would evaporate it.
+                self.report_audit(ENCRYPT_ACTION, "", None, False)
+                return
+            if extension in OOXML_EXTENSIONS:
+                self._force_encrypt(url, arguments)
+                return
+            # .odt/.pdf/.txt/... target: plaintext family, audited.
             self.report_audit(PLAINTEXT_ACTION, self.current_doc_hash(), None, True)
             self._delegate(url, arguments)
             return
+        if url.Complete in SAVE_AS_FAMILY:
+            # Dialog SaveAs/SaveACopy: target unknown at dispatch time ->
+            # inject the forced-encrypt payload (fail-safe default).
+            self._force_encrypt(url, arguments)
+            return
+        # .uno:Save / .uno:SaveAll with no URL argument: target IS the current
+        # medium (the session temp plaintext) -> NEVER inject; write-back of
+        # the temp plaintext is the session close's re-encrypt.
+        self._delegate(url, arguments)
+
+    def _force_encrypt(self, url, arguments) -> None:
         password = self.get_master_key()
         if password is None:
             # fail-closed: no key -> refuse the OOXML save entirely.
@@ -241,12 +297,25 @@ class ForceEncryptInterceptor(unohelper.Base,
         ))
         self.report_audit(ENCRYPT_ACTION, plaintext_hash, None, True)
 
-    def _save_target_url(self, arguments) -> str:
+    def _target_url_arg(self, arguments) -> str:
+        """Explicit ``URL`` media-descriptor argument; '' when absent (dialog
+        flow).  Deliberately NOT the model URL: that is the source medium, and
+        deciding SaveAs on it would corrupt the temp-plaintext write-back."""
         for argument in arguments:
             if getattr(argument, "Name", "") == "URL":
                 return str(getattr(argument, "Value", "") or "")
-        model = self._doc_model()
-        return model.getURL() if model is not None else ""
+        return ""
+
+    def _under_guard(self, url: str) -> bool:
+        """True when a target file URL is inside the guarded (session temp)
+        directory.  Prefix compare on normalized file URLs; no guard set or a
+        non-file URL never matches."""
+        if not self._guard_url or not url:
+            return False
+        normalized = url.replace("\\", "/").rstrip("/").lower()
+        if not normalized.startswith("file:"):
+            return False
+        return normalized.startswith(self._guard_url) or normalized + "/" == self._guard_url
 
     def _delegate(self, url, arguments) -> None:
         """Forward to the slave chain (spike P2a delegate pattern)."""

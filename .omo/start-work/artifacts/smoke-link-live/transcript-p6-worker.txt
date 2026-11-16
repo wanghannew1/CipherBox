@@ -1,0 +1,16 @@
+smoke_link_live phase 6; products in C:\Users\User\AppData\Local\Temp\cipherbox-smoke6-out
+
+=== P6 real LinkWorker: registered BEFORE loaded, watcher, close ===
+PASS  P6 worker reached registered+loaded [{'event': 'registered', 'frames': 2}, {'event': 'loaded'}]
+PASS  P6 hard ordering: registered BEFORE loaded (todo 14) [{'event': 'registered', 'frames': 2}, {'event': 'loaded'}]
+PASS  P6 registered on >=1 pre-existing frame frames=2
+PASS  P6 the SACRIFICIAL frame was swept (existing frames intercepted) registered=2
+PASS  P6 watcher registered the mid-session frame registered=2
+PASS  P6 temp plaintext still plaintext ZIP while session open 
+PASS  P6 target doc found for close 
+PASS  P6 worker emitted closed (clean, not crashed) [{'event': 'registered', 'frames': 2}, {'event': 'loaded'}, {'event': 'closed', 'crashed': False}]
+PASS  P6 worker thread exited 
+PASS  P6 no audit events during open/edit/close (nothing saved) []
+PASS  P6 temp plaintext STILL plaintext after session end 
+
+RESULT: PASS (phase 6)

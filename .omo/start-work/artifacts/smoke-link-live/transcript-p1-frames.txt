@@ -1,0 +1,9 @@
+smoke_link_live phase 1; products in C:\Users\User\AppData\Local\Temp\cipherbox-smoke6-out
+
+=== P1 frame identity: repeated enumeration over ONE bridge ===
+PASS  P1 enumeration stable count 3 vs 3 frames: ['未命名 2 — LibreOffice Writer', '未命名 1 — LibreOffice Writer', '']
+NOTE  P1 proxy freshness across repeated enumeration (LO build fact) -- FRESH ids per call -- dedup must NOT use proxy identity (this is why the link worker probes the interceptor chain)
+PASS  P1 chain dedup probe: IC2's slave reports IC1's impl name slave-impl='com.sun.star.comp.cipherbox.ForceEncryptInterceptorImpl'
+PASS  P1 registration produced no audit (register-only) []
+
+RESULT: PASS (phase 1)

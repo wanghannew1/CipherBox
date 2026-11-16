@@ -3,11 +3,18 @@
 Protocol (one JSON line each way, UTF-8, byte-mode pipe):
 
     request   {"cmd": "open", "path": "<absolute .cbx path>"}
+              {"cmd": "key"}                                   (link worker, todo 17)
+              {"cmd": "audit", "action": ..., "file_hash": ...,
+               "key_version": ..., "ok": ...}                  (link worker, todo 17)
     response  {"ok": true, ...}  |  {"ok": false, "error": "..."}
 
-The server handles ONE connection at a time (serial controlled sessions);
-requests queue naturally at the pipe while a session runs.  Win32 bindings
-live in :mod:`agent.winpipe` (pywin32 is broken on this workstation).
+``open`` is served on the launcher pipe; the per-session link worker fetches
+the current master key and reports interceptor audits on the link pipe
+(``LINK_PIPE_NAME``).  Both run through the same serial server class; a
+server is constructed with either a single ``open`` handler (back-compat) or
+a ``{cmd: handler}`` router.  The server handles ONE connection at a time;
+requests queue naturally at the pipe.  Win32 bindings live in
+:mod:`agent.winpipe` (pywin32 is broken on this workstation).
 """
 
 from __future__ import annotations
@@ -47,6 +54,7 @@ from agent.winpipe import (
 )
 
 PIPE_NAME = r"\\.\pipe\cipherbox-open"
+LINK_PIPE_NAME = r"\\.\pipe\cipherbox-link"
 
 MAX_REQUEST_BYTES = 64 * 1024
 
@@ -55,7 +63,9 @@ class OpenPipeServer:
     """Serial named-pipe server: accept -> one request -> one response -> next."""
 
     def __init__(self, handler, pipe_name: str = PIPE_NAME) -> None:
-        self.handler = handler
+        # A bare callable is the back-compat "open" handler; a dict routes by
+        # request cmd ({"open": ..., "key": ..., "audit": ...}).
+        self.handlers = handler if isinstance(handler, dict) else {"open": handler}
         self.pipe_name = pipe_name
         self.listening = threading.Event()
         self._shutdown = create_manual_reset_event()
@@ -162,15 +172,25 @@ class OpenPipeServer:
             request = json.loads(line)
         except json.JSONDecodeError:
             return {"ok": False, "error": "malformed JSON request"}
-        if not isinstance(request, dict) or request.get("cmd") != "open":
-            return {"ok": False, "error": "unsupported request: cmd must be 'open'"}
-        path = request.get("path")
-        if not isinstance(path, str) or not path:
-            return {"ok": False, "error": "missing 'path' in open request"}
+        if not isinstance(request, dict):
+            return {"ok": False, "error": "malformed JSON request"}
+        cmd = request.get("cmd")
+        handler = self.handlers.get(cmd) if isinstance(cmd, str) else None
+        if handler is None:
+            supported = ", ".join(sorted(self.handlers))
+            return {"ok": False,
+                    "error": f"unsupported request: cmd must be one of: {supported}"}
+        if cmd == "open":
+            path = request.get("path")
+            if not isinstance(path, str) or not path:
+                return {"ok": False, "error": "missing 'path' in open request"}
+            argument: object = path
+        else:
+            argument = request
         try:
-            return self.handler(path)
+            return handler(argument)
         except Exception as exc:  # boundary: handler failure -> JSON response
-            return {"ok": False, "error": f"open failed: {exc}"}
+            return {"ok": False, "error": f"{cmd} failed: {exc}"}
 
 
 def connect_and_request(pipe_name: str, request: dict, timeout_s: float = 5.0) -> dict:

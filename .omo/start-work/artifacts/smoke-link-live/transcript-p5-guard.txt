@@ -1,0 +1,10 @@
+smoke_link_live phase 5; products in C:\Users\User\AppData\Local\Temp\cipherbox-smoke6-out
+
+=== P5 SaveAs target under the guard dir is refused ===
+PASS  P5 guard-refusal audit fired exactly once [('encrypt', '', None, False)]
+PASS  P5 refusal ok=False 
+PASS  P5 escape target NOT written 
+PASS  P5 session dir gained no new files ['plain.docx']
+PASS  P5 source plaintext still plaintext ZIP 
+
+RESULT: PASS (phase 5)

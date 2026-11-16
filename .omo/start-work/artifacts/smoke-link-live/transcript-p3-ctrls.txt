@@ -1,0 +1,13 @@
+smoke_link_live phase 3; products in C:\Users\User\AppData\Local\Temp\cipherbox-smoke6-out
+
+=== P3 in-place .uno:Save -> delegate unchanged (plaintext persists) ===
+PASS  P3 file on disk is STILL plaintext ZIP (no EncryptionData injection) magic=504b030414000808, 5527 bytes
+PASS  P3 save rewrote the file (sha changed from the stored baseline) before=25aef8ae30c1b5b4 after=1dc1fc66b6f8bf97
+PASS  P3 edit persisted to disk (marker inside the inflated OOXML) 5527 bytes, zip=b'PK'
+PASS  P3 no encrypt audit fired []
+PASS  P3 engine did NOT run (no encrypt() in engine log) 
+PASS  P3 doc unmodified after save 
+PASS  P3 medium unchanged (still the temp plaintext) location='file:///C:/Users/User/AppData/Local/Temp/cipherbox-smoke6-out/p3/session/plain.docx'
+NOTE  P3 instance still alive after dispatch -- yes
+
+RESULT: PASS (phase 3)

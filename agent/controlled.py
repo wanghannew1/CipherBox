@@ -7,10 +7,10 @@ this module provides the production callbacks:
   cleartext with the controlled profile + per-session UNO pipe, detached
   from the agent console, returning the PID;
 * ``wait_document_close`` — block on the controlled soffice process
-  (``OpenProcess`` + ``WaitForSingleObject``).  Document-level (XModel
-  dispose) close detection needs the todo-17 interceptor wiring; process
-  exit is the composition-root MVP (honours the opener contract:
-  True = closed, False = timeout/lost).
+  (``OpenProcess`` + ``WaitForSingleObject``).  With the todo-17 interceptor
+  link wired (the production path), the opener instead waits on the link
+  worker, which detects document-level (XModel) close; this process-exit
+  wait remains the fallback when no link handle exists (unit-test path).
 """
 
 from __future__ import annotations
@@ -54,7 +54,15 @@ def find_soffice() -> str:
 
 
 def launch_soffice(tmp_path: str, profile: str, pipe_name: str, env: dict) -> int:
-    """Start the controlled GUI soffice; return its PID (opener contract)."""
+    """Start the controlled GUI soffice WITHOUT the document (opener contract).
+
+    The temp plaintext is deliberately NOT passed on the command line: the
+    link worker loads it via ``loadComponentFromURL`` only AFTER the
+    interceptor is registered on every frame (todo 14 hard ordering
+    "先注册、后加载" — loading at launch would open a fail-open window in
+    which an un-intercepted SaveAs escapes).  ``tmp_path`` is still used for
+    the TMP/TEMP environment the caller sets.
+    """
     exe = find_soffice()
     profile_uri = Path(profile).as_uri()
     try:
@@ -64,7 +72,6 @@ def launch_soffice(tmp_path: str, profile: str, pipe_name: str, env: dict) -> in
                 "-env:UserInstallation=" + profile_uri,
                 "--accept=pipe,name=%s;urp;" % pipe_name,
                 "--norestore",
-                tmp_path,
             ],
             env=env,
             creationflags=subprocess.DETACHED_PROCESS,
