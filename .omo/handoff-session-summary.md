@@ -3,6 +3,34 @@
 > 本文档由 2026-11-02 会话生成，**取代旧版**（旧版"全部完成"的声明经审计证伪）。
 > 后续会话基于本文档 + `.omo/plans/cipherbox-transparent-encryption.md`（300 行，权威规格）继续推进。
 
+## 〇-bis、2026-11-16 下午会话增补（LO 实机冒烟 6/6 + 三个产品 bug 修复）
+
+**环境**：本机已装 LibreOffice 26（buildid 861effc5，自带 Python 3.13.18 含 uno）——上一节"无 LibreOffice/LO 实机验证不可跑"已失效，LO 冒烟/E2E 本机可跑。`soffice --version` 会挂起，查版本用 version.ini。
+
+**LO 实机冒烟（交接优先级 ①）已完成**：新增 `lo-encryption-demo/test/smoke_link_live.py`（6 phase，P1 frame 身份 / P2 强制另存→CFB+引擎回读 / P3 Ctrl+S 明文写回 / P4 对话框流 fail-closed / P5 temp 守卫拒存 / P6 真实 LinkWorker 硬顺序+watcher+干净关闭）+ `run_smoke_link.ps1`（per-phase 专用 headless 实例，pipe `cipherbox-smoke6`，%TEMP% profile，引擎双模块部署——注意老 `run_spike_interceptor.ps1` 只部署 cipherbox.py 是 todo-10 拆分前的旧配方）。**全量 `summary: p1=0 p2=0 p3=0 p4=0 p5=0 p6=0`**。transcript 在 `.omo/start-work/artifacts/smoke-link-live/`。测试基线 262→**265 passed**。
+
+**实机发现（fake 单测结构性抓不到，全部已修）**：
+1. **XFrames.queryFrames 每次轮询返回全新客户端代理**（P1 实证：一次桥上 6 个 id 全不同）——`uno_link_worker` 原 `frame is known` 去重**永不命中**，watcher 会每 2s 叠一层拦截器。改用**链内探测**：新注册的拦截器其 slave 即旧链头，slave 的 `getImplementationName()`（XServiceInfo，唯一能过桥的字符串成员）== 自己的实现名 → 帧已被拦截 → release 副本（`_slave_is_sibling`）。
+2. **pyuno 代理只暴露 UNO 声明成员**——plain Python 方法（token getter）跨桥 `getattr` 得 None。探测必须用声明过的接口成员。
+3. **`_BridgedCloseListener` 缺 `__init__`**——unohelper.Base 无参构造，带参调用 TypeError（P6 首跑即崩）。已补 override。
+4. **close(False) 连发 notifyClosing+disposing**——原 disposing 无条件定罪 crash，正常关闭被误判。修复：notifyClosing 打 `_notified` 标记，disposing 见标记不定罪；且 doc 死+桥活→干净，桥死→crash（`_bridge_alive` 探 desktop）。
+5. **WarnAlienFormat=true 时 headless 的 .uno:Save 委派直接杀桥**（URP DisposedException→pyuno 原生崩）——关掉后保存正常。**产品部署加固（todo 21）应给受控 profile 预设 WarnAlienFormat=false**。
+6. `ConfigurationUpdateAccess` 须经 `ConfigurationProvider.createInstanceWithArguments` 二段式创建，裸 ServiceManager 建出 None。
+
+**未提交（等用户指示）**。**下一步**：① GUI 侧冒烟（真对话框流 with-key 分支——P4 只验证了 fail-closed 决策分支，P8 教训：picker 槽位 GUI 才能驱动）② todo 23 veracrypt_bootstrap.ps1 ③ 主密钥 DPAPI（todo 6）。
+
+## 〇、2026-11-16 会话增补（拦截器接入 + 新开发机环境）
+
+**主线进展（todo 17 ①接入，未提交）**：
+1. **拦截器接入装配链**：新 `agent/uno_link_worker.py`（每会话链接工作进程，跑 LO 自带 Python——pyuno 版本锁死，系统 Python 进程内注册不可行）+ `agent/session_link.py`（Agent 侧生命周期/JSON 行协议/registered→loaded 门禁）+ `agent/__main__.py`（链接管道 `\\.\pipe\cipherbox-link` 提供 key/audit 命令、卷内审计队列启动重放、拦截器附接工厂）。`controlled.py` 启动受控 LO **不再带文档参数**（文档由链接进程在注册确认后经 UNO 加载——硬顺序落地）。`opener.py` 附接失败即 fail-closed 终止会话（杀 GUI、删 temp、删 session 记录），并把"杀受控 GUI"提前到 hash 对比/重加密之前 + `_read_settled` 等锁。
+2. **堵住两个真实隐患**：① Ctrl+S 数据损坏——`.uno:Save/.uno:SaveAll` 目标=临时明文自身，旧逻辑按扩展名会注入 EncryptionData 把明文写成密文、收尾回灌坏 `.cbx`；现永不注入，明文持久化由会话收尾负责。② 会话 temp 逃逸——写盘目标在 temp 目录内一律拒存（`set_guard` + `_under_guard`）。
+3. **测试**：新 `test_force_encrypt_logic.py`（分流矩阵，fake uno 模块图注入 sys.modules）/`test_uno_link_worker.py`（硬顺序/守护线程/密钥/审计回落）/`test_session_link.py`（真实子进程协议）+ ipc 路由/main 装配测试；全套 **262 passed**（旧基线 201）。
+4. **顺手修复（新机环境暴露）**：`deploy/gen_certs.py` CA 证书缺 `basicConstraints=CA:TRUE`（严格校验链直接废——所有 pin ca.crt 的客户端会拒服务器证书），已补 v3_ca 扩展；ipc 陈旧实例测试竞态改确定性重试；delegation 测试摆脱"机器必须装 LO"的隐式依赖（autouse 占位解释器）。
+
+**新开发机环境（重要）**：本机（C:\code\cipher-box）**无 LibreOffice、无 anaconda**——LO 相关实机验证（拦截器冒烟、E2E）不可在本机跑，需部署环境。Python 环境已建好：Miniconda 3.14.10 @ `C:\code\miniconda3`（TUNA 镜像安装），uv 0.13.8 @ `C:\code\miniconda3\Scripts\uv.exe`，项目 venv @ `.venv`（pytest 9.2/requests/watchdog/olefile/psutil/requests_mock/fastapi 全套，清华镜像）。跑测试：`.venv/Scripts/python.exe -m pytest server/tests agent/tests -q`。GitHub 直连不通，一切下载走 TUNA/镜像。
+
+**下一步优先级（更新）**：① LO 实机冒烟拦截器（另存为 OOXML→密文 / Ctrl+S 写回明文 / 对话框流 / URP 桥 frame 身份幂等——需装 LO 的机器）；② todo 23 veracrypt_bootstrap.ps1；③ 主密钥 DPAPI（todo 6）；④ 部署加固 20/21；⑤ E2E 扩展 + F1-F4 重审。git 未提交（等用户指示）。
+
 ## 一、当前状态快照
 
 | 项目 | 内容 |

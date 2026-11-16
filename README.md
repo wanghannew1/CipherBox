@@ -46,15 +46,18 @@ Agent 常驻程序 (agent/)  ──取钥/上报──▶  服务器 (server/, F
 ## 测试
 
 ```powershell
-python -m pytest server/tests agent/tests -q      # 201 passed（单元+集成）
-# LO 引擎侧（需 S: 卷 + 常驻服务，见实测指南第 1 节）
-& 'C:\Program Files\LibreOffice\program\python.exe' test\e2e_full.py
+python -m pytest server/tests agent/tests -q      # 265 passed（单元+集成）
+# LO 实机冒烟（需本机装有 LibreOffice；专用 headless 实例，不碰 S: 卷）
+powershell -NoProfile -ExecutionPolicy Bypass -File lo-encryption-demo/test/run_smoke_link.ps1
+# LO 引擎侧 e2e（需 S: 卷 + 常驻服务，见实测指南第 1 节）
+& 'C:\Program Files\LibreOffice\program\python.exe' test/e2e_full.py
 ```
 
 ## 当前状态（诚实版）
 
 - **可用**：服务器全部功能、加密引擎与 `.cbx` 容器、Agent 主程序（监控自动加密 + 双击受控打开 + 审计 + 崩溃恢复）、审计防篡改校验。
-- **已知缺口**（详见 `.omo/handoff-session-summary.md` v2）：受控会话内"另存为明文"强制拦截**尚未接入**（拦截器本体已修复并冒烟通过）；`deploy/veracrypt_bootstrap.ps1`（todo 23）缺失；拦截器专项测试（todo 19）缺失；部署脚本的自启/ACL/LO 加固为简化版；主密钥明文存 DB（DPAPI 包裹待补）。
+- **本次新接入（2026-11-16，单测 265 全绿 + LO 26 实机冒烟 6/6）**：受控会话"另存为明文"强制拦截已接入装配链（todo 17 ①）——每会话链接工作进程（LO 自带 Python）注册拦截器**先于文档加载**（硬顺序），按保存会话密钥（取不到即拒存）、审计经链接管道回流 Agent（断连落卷内 JSONL 队列、启动重放）；`.uno:Save/.uno:SaveAll` 永不注入（堵住"Ctrl+S 把临时明文写成密文、会话收尾回灌坏 `.cbx`"的数据损坏隐患）；会话 temp 目录内目标一律拒存（fail-closed）。实机冒烟（`lo-encryption-demo/test/run_smoke_link.ps1`，6 phase）覆盖：另存→CFB+引擎回读、Ctrl+S 明文、对话框流 fail-closed、temp 守卫、LinkWorker 硬顺序，并实证三条 LO 事实——`queryFrames` 每轮询返回全新代理（帧去重改走拦截器链 impl-name 探测）、pyuno 代理只暴露 UNO 声明成员、`close(False)` 连发 notifyClosing+disposing（关闭分类按"先通知后处置"定序）。
+- **已知缺口**（详见 `.omo/handoff-session-summary.md`）：拦截器驻留 LO 进内（pythonloader 部署）与心跳监控未做；对话框流 with-key 分支待 GUI 真窗口验证；`deploy/veracrypt_bootstrap.ps1`（todo 23）缺失；部署脚本的自启/ACL/LO 加固为简化版（受控 profile 应预设 `WarnAlienFormat=false`——headless 实证其交互路径会杀 URP 桥）；主密钥明文存 DB（DPAPI 包裹待补）。
 - **明确不做**：内核驱动、审批流、doc/xls/ppt 主密钥加密、移动端（计划 Scope 声明）。
 
 ## 文档
