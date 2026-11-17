@@ -39,9 +39,10 @@ from pathlib import Path
 from typing import Annotated, Any, Iterator
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from . import audit, auth, database, key_manager
+from . import adminui, audit, auth, database, key_manager
 from .config import ServerConfig, load_config
 from .models import EmployeeToken
 
@@ -231,5 +232,39 @@ def create_app(
     @app.post("/admin/revoke")
     def revoke(body: RevokeRequest, admin: AdminEmployee, conn: DbConn) -> dict[str, int]:
         return {"revoked": auth.revoke_employee(conn, body.employee)}
+
+    # ------------------------------------------------------------------
+    # Admin console (browser UI). The page itself is static HTML with NO
+    # data — loading it needs no auth; every data call it makes carries the
+    # admin Bearer token client-side. Reuses require_admin like the JSON
+    # endpoints above.
+    # ------------------------------------------------------------------
+
+    _ADMIN_HTML = Path(__file__).resolve().parent / "static" / "admin.html"
+
+    @app.get("/admin/ui")
+    def admin_ui() -> FileResponse:
+        if not _ADMIN_HTML.exists():
+            raise HTTPException(status_code=500, detail="admin.html missing from deployment")
+        # no-store: always serve the current page after an upgrade
+        return FileResponse(_ADMIN_HTML, media_type="text/html",
+                            headers={"Cache-Control": "no-store"})
+
+    @app.get("/admin/summary")
+    def admin_summary(admin: AdminEmployee, conn: DbConn) -> dict[str, Any]:
+        # One-call dashboard payload (key versions WITHOUT key material,
+        # per-employee token rollup, event count, chain anchors).
+        return adminui.build_summary(conn)
+
+    @app.post("/admin/verify_chain")
+    def admin_verify_chain(admin: AdminEmployee, conn: DbConn) -> dict[str, Any]:
+        # Full HMAC chain + anchor verification, server-side (the browser
+        # never sees the HMAC key). 200 {"ok": false, "error": ...} means the
+        # check RAN and FAILED — distinct from 4xx/5xx transport errors.
+        try:
+            result = audit.verify_audit_chain(conn, _load_hmac_key())
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        return result
 
     return app
