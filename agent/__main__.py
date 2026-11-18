@@ -107,7 +107,12 @@ def make_key_handler(key_manager: KeyManager) -> Callable[[dict], dict]:
 
 
 def make_audit_handler(audit: AuditReporter) -> Callable[[dict], dict]:
-    """Interceptor audit event -> resident AuditReporter (server/queue)."""
+    """Interceptor audit event -> resident AuditReporter (server/queue).
+
+    Every link audit is echoed on the agent console: forced saves / plaintext
+    exports are rare and security-relevant, and without this line a refused
+    save is invisible to the operator.
+    """
 
     def handle_audit(request: dict) -> dict:
         action = request.get("action")
@@ -121,6 +126,8 @@ def make_audit_handler(audit: AuditReporter) -> Callable[[dict], dict]:
         if key_version is not None and not isinstance(key_version, int):
             return {"ok": False, "error": "key_version must be int or null"}
         audit.report(action, file_hash, key_version, ok)
+        prefix = f" {file_hash[:48]}" if file_hash else ""
+        print(f"[agent] link audit: {action} ok={ok}{prefix}")
         return {"ok": True}
 
     return handle_audit

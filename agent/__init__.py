@@ -23,3 +23,25 @@ def make_console_prints_safe() -> None:
             reconfigure(errors="replace")
         except Exception:  # noqa: BLE001 — console setup must never crash startup
             pass
+
+
+def hide_directory(path: str) -> None:
+    """Mark a directory +H (best-effort, idempotent).
+
+    The agent's volume-side work areas (``.cipherbox-tmp`` /
+    ``.cipherbox-quarantine`` / ``.cipherbox-profile``) reveal cipherbox
+    usage to anyone browsing the volume; hiding them keeps Explorer's
+    default view to documents only.  Windows-hidden affects visibility
+    only — access by LO, recovery and the watcher is unchanged.  Failure
+    to set the attribute is never fatal.
+    """
+    import ctypes
+
+    try:
+        kernel32 = ctypes.WinDLL("kernel32.dll", use_last_error=True)
+        attrs = kernel32.GetFileAttributesW(path)
+        if attrs == -1:  # INVALID_FILE_ATTRIBUTES: gone / inaccessible
+            return
+        kernel32.SetFileAttributesW(path, attrs | 0x2)  # FILE_ATTRIBUTE_HIDDEN
+    except Exception:  # noqa: BLE001 — cosmetic hardening must never crash
+        pass

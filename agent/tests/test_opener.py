@@ -13,6 +13,7 @@ import pytest
 
 import cipherbox_crypto as crypto
 from agent.container import CbxContainer, STREAM_DATASPACEINFO, STREAM_ENCRYPTEDPACKAGE
+from agent import hide_directory
 from agent.opener import (
     ControlledOpener,
     JobObject,
@@ -326,3 +327,152 @@ class TestBindOfficeChildren:
                                      log=logs.append)
         assert bound == 0
         assert any("no office child" in line for line in logs)
+
+
+# ---------------------------------------------------------------------------
+# _cleanup_session_dir (session scratch must not leave shell dirs behind —
+# LO's lu*.tmp used to defeat the plain rmdir and recovery then quarantined
+# the empty shell as an orphan on every next startup)
+# ---------------------------------------------------------------------------
+
+def _make_opener(log) -> ControlledOpener:
+    return ControlledOpener(
+        container=None, passwords=[], key_version=1,
+        session_store=None, log=log)
+
+
+class TestCleanupSessionDir:
+    @staticmethod
+    def _make_dir(tmp_path: Path) -> str:
+        d = tmp_path / "session"
+        (d / "lu9828ec09f.tmp" / "inner").mkdir(parents=True)
+        (d / "a.docx").write_bytes(b"plaintext")
+        (d / "lu9828ec09f.tmp" / "lock.bin").write_bytes(b"x")
+        return str(d)
+
+    def test_removes_dir_with_lo_residue(self, tmp_path: Path):
+        logs: list[str] = []
+        d = self._make_dir(tmp_path)
+        _make_opener(logs.append)._cleanup_session_dir(d)
+        assert not os.path.exists(d)
+        assert logs == []
+
+    def test_retries_transient_lock_then_succeeds(self, tmp_path: Path, monkeypatch):
+        import shutil
+        logs: list[str] = []
+        d = self._make_dir(tmp_path)
+        calls = {"n": 0}
+        real_rmtree = shutil.rmtree
+
+        def flaky(path, *args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise OSError("lock held")
+            return real_rmtree(path, *args, **kwargs)
+
+        monkeypatch.setattr(shutil, "rmtree", flaky)
+        _make_opener(logs.append)._cleanup_session_dir(d, delay_s=0)
+        assert not os.path.exists(d)
+        assert calls["n"] == 3
+        assert logs == []
+
+    def test_permanent_failure_reports_and_does_not_raise(self, tmp_path: Path,
+                                                          monkeypatch):
+        import shutil
+        logs: list[str] = []
+        d = self._make_dir(tmp_path)
+
+        def refuse(path, *args, **kwargs):
+            raise OSError("locked forever")
+
+        monkeypatch.setattr(shutil, "rmtree", refuse)
+        _make_opener(logs.append)._cleanup_session_dir(d, attempts=2, delay_s=0)
+        assert os.path.exists(d)  # fail-closed: recovery sweeps it as an orphan
+        assert any("not fully removed" in line for line in logs)
+
+    def test_missing_dir_is_noop(self, tmp_path: Path):
+        logs: list[str] = []
+        _make_opener(logs.append)._cleanup_session_dir(str(tmp_path / "gone"))
+        assert logs == []
+
+
+# ---------------------------------------------------------------------------
+# hide_directory (agent work areas stay out of Explorer's default view)
+# ---------------------------------------------------------------------------
+
+class TestHideDirectory:
+    def test_sets_hidden_attribute(self, tmp_path: Path):
+        import ctypes
+        d = tmp_path / "h"
+        d.mkdir()
+        hide_directory(str(d))
+        attrs = ctypes.WinDLL("kernel32.dll").GetFileAttributesW(str(d))
+        assert attrs != -1 and attrs & 0x2
+
+    def test_idempotent(self, tmp_path: Path):
+        import ctypes
+        d = tmp_path / "h2"
+        d.mkdir()
+        hide_directory(str(d))
+        hide_directory(str(d))
+        attrs = ctypes.WinDLL("kernel32.dll").GetFileAttributesW(str(d))
+        assert attrs != -1 and attrs & 0x2
+
+    def test_missing_path_is_noop(self, tmp_path: Path):
+        hide_directory(str(tmp_path / "nope"))  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# engine deployment into the controlled profile (live 2026-11-18: the
+# controlled profile had NO CipherBoxDataSpace engine -> every payload save
+# failed impl_store Io Write/16; the service profile got the engine from
+# start_soffice.ps1, the controlled one from nobody)
+# ---------------------------------------------------------------------------
+
+class TestEnsureCipherboxEngine:
+    def test_deploys_modules_rdb_and_unorc(self, tmp_path: Path):
+        from agent.engine_deploy import ensure_cipherbox_engine
+        profile = tmp_path / "controlled"
+        ensure_cipherbox_engine(str(profile), log=lambda _m: None)
+        base = profile / "user"
+        assert (base / "Scripts" / "python" / "cipherbox.py").is_file()
+        assert (base / "Scripts" / "python" / "cipherbox_crypto.py").is_file()
+        rdb = (base / "extensions" / "shared" / "cipherbox" / "components.rdb").read_text()
+        assert "com.cipherbox.CipherBoxDataSpace" in rdb
+        assert "com.sun.star.comp.oox.crypto.CipherBoxDataSpace" in rdb
+        assert (profile.as_uri() + "/user/Scripts/python/cipherbox") in rdb
+        unorc_path = (base / "extensions" / "shared" / "registry" /
+                      "com.sun.star.comp.deployment.component.PackageRegistryBackend" /
+                      "unorc")
+        content = unorc_path.read_text()
+        assert "UNO_SERVICES=?$SHARED_EXTENSIONS_USER/cipherbox/components.rdb" in content
+
+    def test_second_run_is_noop(self, tmp_path: Path):
+        from agent.engine_deploy import ensure_cipherbox_engine
+        profile = tmp_path / "controlled"
+        ensure_cipherbox_engine(str(profile), log=lambda _m: None)
+        rdb = (profile / "user" / "extensions" / "shared" / "cipherbox" /
+               "components.rdb")
+        before = rdb.read_bytes()
+        logs: list[str] = []
+        ensure_cipherbox_engine(str(profile), log=logs.append)
+        assert logs == []  # hash-guarded: nothing rewritten
+        assert rdb.read_bytes() == before
+
+    def test_module_change_redeploys(self, tmp_path: Path):
+        from agent.engine_deploy import ensure_cipherbox_engine
+        profile = tmp_path / "controlled"
+        ensure_cipherbox_engine(str(profile), log=lambda _m: None)
+        deployed = profile / "user" / "Scripts" / "python" / "cipherbox.py"
+        deployed.write_bytes(b"tampered")
+        logs: list[str] = []
+        ensure_cipherbox_engine(str(profile), log=logs.append)
+        assert any("engine deploy" in line for line in logs)
+        assert deployed.read_bytes() != b"tampered"
+
+    def test_missing_source_raises(self, tmp_path: Path):
+        from agent.engine_deploy import ensure_cipherbox_engine
+        with pytest.raises(FileNotFoundError):
+            ensure_cipherbox_engine(str(tmp_path / "p"),
+                                    src_dir=str(tmp_path / "nowhere"),
+                                    log=lambda _m: None)

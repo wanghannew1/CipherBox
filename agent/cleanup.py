@@ -27,6 +27,9 @@ watcher (including its initial scan).  Strict order inside the run:
 3. Stale session-directory sweep: UUID-named dirs under ``<tmp_root>`` with
    no matching session record are quarantined (+ ``recovery_orphan_dir``
    alert); the ``service`` and ``audit-queue`` subdirs are exempt.
+4. Quarantine retention purge: quarantine entries older than
+   ``quarantine_retention_days`` (default 30) are removed — quarantine can
+   hold plaintext and must not accumulate forever; ``<= 0`` disables.
 
 ``find_plaintext_office_files`` / :func:`scan_plaintext_leaks` keep the
 ``%TEMP%`` and profile backup/AutoRecovery scans as regression assertions.
@@ -56,6 +59,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import time
 import uuid
 import zipfile
@@ -65,6 +69,7 @@ from typing import Callable
 if os.name != "nt":  # pragma: no cover - Windows-only agent
     raise ImportError("agent/cleanup.py is Windows-only")
 
+from agent import hide_directory
 from agent.container import OOXML_MAGIC
 from agent.key_manager import KeyManager, KeyManagerError, dpapi_decrypt, dpapi_encrypt
 from agent.opener import SESSION_DIR, SessionRecord, SessionStore
@@ -205,6 +210,7 @@ class RecoveryConfig:
         r"S:\.cipherbox-profile\service\backup",
     ))
     stale_dir_seconds: float = 0.0  # sweep dirs at least this old; 0 = all
+    quarantine_retention_days: float = 30.0  # purge quarantine past this; <= 0 keeps forever
     audit_reporter: AuditFn | None = None
     re_encrypt: ReEncryptFn | None = None  # (tmp_path, cbx_path, password)
     get_current_key: CurrentKeyFn | None = None
@@ -231,6 +237,7 @@ class RecoveryReport:
     record_only_removed: int = 0
     reencrypt_failed: int = 0
     dirs_swept: int = 0
+    quarantine_purged: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +258,7 @@ def _temp_intact(path: str) -> bool:
 def _quarantine(path: str, quarantine_dir: str) -> str:
     """Move a temp file/dir into the quarantine dir; returns destination."""
     os.makedirs(quarantine_dir, exist_ok=True)
+    hide_directory(quarantine_dir)
     dest = os.path.join(quarantine_dir, f"{uuid.uuid4().hex}-{os.path.basename(path)}")
     os.replace(path, dest)
     return dest
@@ -569,19 +577,60 @@ class _Recovery:
             )
             self.report.dirs_swept += 1
 
+    # -- phase 4: quarantine retention ------------------------------------
+
+    def purge_quarantine(self) -> None:
+        """Remove quarantine entries older than ``quarantine_retention_days``.
+
+        Quarantine is a review buffer, not cold storage — on a confidential
+        volume it can hold PLAINTEXT, so it must not accumulate forever.
+        ``os.replace`` moves preserve mtime, so the entry's mtime is a good
+        proxy for when it landed here.  ``<= 0`` days disables purging
+        (keep everything until a human decides).  Locked/unreadable entries
+        survive to the next startup (fail-closed: never force-delete).
+        """
+        retention_days = self.config.quarantine_retention_days
+        if retention_days <= 0:
+            return
+        qdir = self.config.quarantine_dir
+        if not os.path.isdir(qdir):
+            return
+        cutoff = time.time() - retention_days * 86400.0
+        for name in sorted(os.listdir(qdir)):
+            full = os.path.join(qdir, name)
+            try:
+                if os.path.getmtime(full) >= cutoff:
+                    continue
+            except OSError:
+                continue  # unreadable: keep (fail-closed)
+            try:
+                if os.path.isdir(full) and not os.path.islink(full):
+                    shutil.rmtree(full)
+                else:
+                    os.remove(full)
+            except OSError:
+                continue  # locked: survive to the next startup
+            self._audit(
+                "quarantine_purged", "0" * 64, True,
+                f"quarantine entry past retention removed: {full}",
+            )
+            self.report.quarantine_purged += 1
+
 
 def run_recovery(config: RecoveryConfig) -> RecoveryReport:
     """Single synchronous startup recovery entry point (todo 26).
 
     Strict order: audit-queue replay -> orphan session recovery -> stale
-    session-dir sweep.  Raises :class:`CleanupError` when the superseded
-    ledger is unreadable (fail-closed: recovery must not proceed without it).
+    session-dir sweep -> quarantine retention purge.  Raises
+    :class:`CleanupError` when the superseded ledger is unreadable
+    (fail-closed: recovery must not proceed without it).
     """
     report = RecoveryReport()
     recovery = _Recovery(config, report)
     recovery.replay_queue()
     recovery.recover_sessions()
     recovery.sweep_dirs()
+    recovery.purge_quarantine()
     return report
 
 

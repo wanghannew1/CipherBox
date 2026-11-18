@@ -3,18 +3,19 @@
 The interceptor body (todo 17 ③ family routing + session-temp guard) decides
 at dispatch time; these tests lock the matrix in with recording fakes:
 
-* SaveAs/SaveACopy with an explicit URL: .cbx passes clean (P7), OOXML is
-  forced-encrypted (Password + EncryptionData injected), non-OOXML is audited
-  export_plaintext, and a target under the session-temp guard is REFUSED
-  (fail-closed, audited ok=False) — nothing may be written into the scratch
-  dir the session close would evaporate;
-* .uno:Save / .uno:SaveAll with no URL argument NEVER inject EncryptionData:
-  their target IS the session temp plaintext, and injecting there would
-  overwrite the temp with ciphertext and corrupt the session-close re-encrypt
-  (the data-corruption hazard this branch exists to close);
-* dialog flows (no URL argument, SaveAs/SaveACopy) inject the forced-encrypt
-  payload as the fail-safe default — worst case an odd save, never plaintext;
-* missing key fail-closes the OOXML save (audited ok=False, no delegation);
+* dispatch() runs INSIDE the office's callback and must never touch the
+  model: payload saves / hashes / audits are deferred to the injected spawn
+  (tests run it synchronously);
+* explicit OOXML/``.cbx`` targets produce an ENCRYPTED SNAPSHOT
+  (``storeToURL`` to ``<final>.part.<ext>`` + atomic ``os.replace`` to
+  ``<final>.cbx``) — never a dispatch-chain delegation (live 2026-11-18: a
+  payload delegate deadlocks or silently writes nothing);
+* dialog flows (no URL argument) defer to the picker seam and snapshot the
+  picked target under the ``.cbx`` convention; cancel saves nothing;
+* in-place saves (``.uno:Save``/``.uno:SaveAll``, no URL) ALWAYS delegate
+  clean — they write the session temp plaintext itself (the corruption
+  guard); the session close owns the re-encrypt;
+* missing key fail-closes the OOXML save (audited ok=False, no write);
 * queryDispatch claims only the save/export families and forwards the rest.
 
 The fake uno module graph is seeded in sys.modules before the (module-level)
@@ -24,8 +25,10 @@ import of force_encrypt; nothing here needs LibreOffice.
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 import types
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -63,6 +66,8 @@ def _install_fake_uno(monkeypatch: pytest.MonkeyPatch) -> None:
     uno.getComponentContext = lambda: object()
     uno.systemPathToFileUrl = lambda path: (
         "file:///" + str(path).replace("\\", "/").lstrip("/"))
+    uno.getConstantByName = lambda name: (_ for _ in ()).throw(
+        RuntimeError("no constants under the fake uno"))
 
     unohelper = types.ModuleType("unohelper")
     unohelper.Base = FakeBase
@@ -126,7 +131,51 @@ class FakeSlave:
         return self._dispatch
 
 
+class FakeModel:
+    """Doc model with a real URL and a recording storeToURL that writes
+    ciphertext bytes to the part file (so os.replace works in tests)."""
+
+    def __init__(self, url: str = "file:///s:/src/a.docx") -> None:
+        self.url = url
+        self.stored: list[tuple[str, tuple]] = []
+
+    def getURL(self) -> str:
+        return self.url
+
+    def getArgs(self) -> tuple:
+        return ()
+
+    def supportsService(self, name: str) -> bool:
+        return False
+
+    def storeToURL(self, url: str, properties) -> None:
+        props = tuple(properties)
+        self.stored.append((str(url), props))
+        # materialize the part file so the snapshot's os.replace succeeds
+        path = str(url)
+        if path.startswith("file:///"):
+            path = path[len("file:///"):]
+        path = path.replace("/", os.sep)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as fh:
+            fh.write(b"CIPHERTEXT-BYTES")
+
+
+class FakeController:
+    def __init__(self, model: FakeModel) -> None:
+        self._model = model
+
+    def getModel(self) -> FakeModel:
+        return self._model
+
+
 class FakeFrame:
+    def __init__(self, model: FakeModel | None = None) -> None:
+        self._model = model or FakeModel()
+
+    def getController(self) -> FakeController:
+        return FakeController(self._model)
+
     def registerDispatchProviderInterceptor(self, interceptor) -> None:
         pass
 
@@ -134,9 +183,16 @@ class FakeFrame:
         pass
 
 
-def make_interceptor(fe, *, guard=None, password="k3", audits=None):
-    interceptor = fe.ForceEncryptInterceptor(object())
-    interceptor.attach(FakeFrame())
+def _sync_spawn(fn) -> None:
+    """Tests run deferred jobs (picker flow, deferred audits, snapshots) inline."""
+    fn()
+
+
+def make_interceptor(fe, *, guard=None, password="k3", audits=None,
+                     pick=None, spawn=_sync_spawn, frame=None):
+    interceptor = fe.ForceEncryptInterceptor(
+        object(), spawn=spawn, pick_save_target=pick)
+    interceptor.attach(frame or FakeFrame())
     interceptor.setSlaveDispatchProvider(FakeSlave(FakeDispatch()))
     interceptor.set_password_provider(password)
     recorder = audits if audits is not None else []
@@ -150,6 +206,14 @@ def arg_names(arguments) -> list[str]:
     return [getattr(a, "Name", "") for a in arguments]
 
 
+def prop_map(props) -> dict:
+    return {getattr(p, "Name", ""): getattr(p, "Value", None) for p in props}
+
+
+def url_of(tmp_path: Path, *parts: str) -> str:
+    return "file:///" + (tmp_path.joinpath(*parts)).as_posix()
+
+
 # ---------------------------------------------------------------------------
 # routing matrix
 # ---------------------------------------------------------------------------
@@ -158,68 +222,83 @@ SESSION_DIR = r"S:\.cipherbox-tmp\uuid-1"
 
 
 class TestExplicitUrlTargets:
-    def test_ooxml_target_is_force_encrypted(self, force_encrypt):
+    def test_ooxml_target_snapshots_encrypted(self, force_encrypt, tmp_path: Path):
         audits: list = []
-        interceptor = make_interceptor(force_encrypt, guard=SESSION_DIR, audits=audits)
+        interceptor = make_interceptor(
+            force_encrypt, guard=str(tmp_path / "session"), audits=audits)
         interceptor.dispatch(FakeURL(".uno:SaveAs"), (
-            FakeArg("URL", "file:///s:/users/emp/Desktop/report.docx"),
+            FakeArg("URL", url_of(tmp_path, "out", "report.docx")),
             FakeArg("FilterName", "MS Word 2007 XML"),
         ))
-        encrypt = [a for a in audits if a[0] == "encrypt"]
-        assert len(encrypt) == 1 and encrypt[0][3] is True
-        delegated = interceptor._slave._dispatch.dispatched
-        assert len(delegated) == 1
-        _, arguments = delegated[0]
-        injected = arg_names(arguments)
-        assert "Password" in injected and "EncryptionData" in injected
+        final = tmp_path / "out" / "report.docx.cbx"
+        assert final.read_bytes() == b"CIPHERTEXT-BYTES"  # landed encrypted
+        assert not list((tmp_path / "out").glob("*.part.*"))  # part renamed
+        stored_url, props = interceptor._frame._model.stored[-1]
+        assert stored_url.endswith("report.docx.cbx.part.docx")
+        assert list(prop_map(props)) == ["FilterName", "Password", "EncryptionData"]
+        assert prop_map(props)["FilterName"] == "MS Word 2007 XML"
+        assert [a[0] for a in audits] == ["encrypt"]
+        assert audits[0][3] is True
+        # the slave chain was NOT used for the payload save
+        assert interceptor._slave._dispatch.dispatched == []
 
-    def test_encryption_data_carries_cryptotype_and_password(self, force_encrypt):
+    def test_encryption_data_carries_cryptotype_and_password(self, force_encrypt,
+                                                             tmp_path: Path):
         interceptor = make_interceptor(force_encrypt, password="the-key")
         interceptor.dispatch(FakeURL(".uno:SaveAs"), (
-            FakeArg("URL", "file:///s:/out/book.xlsx"),))
-        _, arguments = interceptor._slave._dispatch.dispatched[0]
-        encryption_data = next(a for a in arguments if getattr(a, "Name", "") == "EncryptionData")
-        value = encryption_data.Value
-        assert isinstance(value, FakeAny) and value.type_name == "[]com.sun.star.beans.NamedValue"
-        names = [nv.Name for nv in value.value]
-        values = {nv.Name: nv.Value for nv in value.value}
-        assert names == ["CryptoType", "Password"]
-        assert values["CryptoType"] == "CipherBoxDataSpace"
-        assert values["Password"] == "the-key"
+            FakeArg("URL", url_of(tmp_path, "out", "book.xlsx")),))
+        _, props = interceptor._frame._model.stored[-1]
+        encryption_data = prop_map(props)["EncryptionData"]
+        assert isinstance(encryption_data, FakeAny)
+        assert encryption_data.type_name == "[]com.sun.star.beans.NamedValue"
+        values = {nv.Name: nv.Value for nv in encryption_data.value}
+        assert values == {"CryptoType": "CipherBoxDataSpace", "Password": "the-key"}
 
-    def test_cbx_target_delegates_unchanged(self, force_encrypt):
+    def test_cbx_target_is_snapshot_as_is(self, force_encrypt, tmp_path: Path):
+        """A ``.cbx`` target is kept (no double suffix) and still encrypted:
+        a pass-through would write plaintext into a .cbx-named file the
+        watcher EXCLUDES by suffix — permanent escape (live 2026-11-18)."""
         audits: list = []
         interceptor = make_interceptor(force_encrypt, audits=audits)
-        original = (FakeArg("URL", "file:///s:/out/keep.cbx"),)
-        interceptor.dispatch(FakeURL(".uno:Save"), original)
-        _, arguments = interceptor._slave._dispatch.dispatched[0]
-        assert arguments == tuple(original)  # no Password injected (P7)
-        assert audits == []
+        interceptor.dispatch(FakeURL(".uno:Save"), (
+            FakeArg("URL", url_of(tmp_path, "out", "keep.cbx")),))
+        final = tmp_path / "out" / "keep.cbx"
+        assert final.read_bytes() == b"CIPHERTEXT-BYTES"
+        stored_url, props = interceptor._frame._model.stored[-1]
+        assert stored_url.endswith("keep.cbx.part.docx")  # src ext in the part
+        assert "EncryptionData" in prop_map(props)
+        assert any(a[0] == "encrypt" and a[3] is True for a in audits)
 
-    def test_non_ooxml_target_audited_export_plaintext(self, force_encrypt):
+    def test_non_ooxml_target_audited_export_plaintext(self, force_encrypt,
+                                                       tmp_path: Path):
         audits: list = []
         interceptor = make_interceptor(force_encrypt, audits=audits)
         interceptor.dispatch(FakeURL(".uno:SaveAs"), (
-            FakeArg("URL", "file:///s:/out/notes.odt"),))
+            FakeArg("URL", url_of(tmp_path, "out", "notes.odt")),))
         assert audits == [("export_plaintext", "", None, True)]
         _, arguments = interceptor._slave._dispatch.dispatched[0]
         assert arg_names(arguments) == ["URL"]  # delegated clean
 
-    def test_target_under_session_guard_is_refused(self, force_encrypt):
+    def test_target_under_session_guard_is_refused(self, force_encrypt,
+                                                   tmp_path: Path):
         audits: list = []
         interceptor = make_interceptor(
-            force_encrypt, guard=SESSION_DIR, audits=audits)
+            force_encrypt, guard=str(tmp_path / "session"), audits=audits)
         interceptor.dispatch(FakeURL(".uno:SaveAs"), (
-            FakeArg("URL", "file:///S:/.cipherbox-tmp/uuid-1/escape.docx"),))
+            FakeArg("URL", url_of(tmp_path, "session", "escape.docx")),))
         assert audits == [("encrypt", "", None, False)]
         assert interceptor._slave._dispatch.dispatched == []  # never delegated
+        assert interceptor._frame._model.stored == []  # never written
 
-    def test_guard_is_case_insensitive_and_boundary_safe(self, force_encrypt):
-        interceptor = make_interceptor(force_encrypt, guard=r"S:\.CipherBox-Tmp\UUID-1")
-        assert interceptor._under_guard("file:///S:/.cipherbox-tmp/uuid-1/x.docx")
-        assert interceptor._under_guard("file:///s:/.cipherbox-tmp/uuid-1/sub/y.docx")
+    def test_guard_is_case_insensitive_and_boundary_safe(self, force_encrypt,
+                                                         tmp_path: Path):
+        interceptor = make_interceptor(
+            force_encrypt, guard=str(tmp_path / "session"))
+        base = "file:///" + (tmp_path / "session").as_posix().lower()
+        assert interceptor._under_guard(base + "/x.docx")
+        assert interceptor._under_guard(base + "/sub/y.docx")
         # sibling directory sharing the prefix must NOT match
-        assert not interceptor._under_guard("file:///s:/.cipherbox-tmp/uuid-10/z.docx")
+        assert not interceptor._under_guard(base + "10/z.docx")
         assert not interceptor._under_guard("")
         assert not interceptor._under_guard("https://evil.example/x.docx")
 
@@ -227,70 +306,132 @@ class TestExplicitUrlTargets:
         interceptor = make_interceptor(force_encrypt)
         assert not interceptor._under_guard("file:///s:/x.docx")
 
-
-class TestDialogFlows:
-    def test_saveas_without_url_forces_encrypt(self, force_encrypt):
-        audits: list = []
-        interceptor = make_interceptor(force_encrypt, audits=audits)
-        interceptor.dispatch(FakeURL(".uno:SaveAs"), ())
-        injected = arg_names(interceptor._slave._dispatch.dispatched[0][1])
-        assert "Password" in injected and "EncryptionData" in injected
-        assert any(a[0] == "encrypt" and a[3] is True for a in audits)
-
-    def test_save_without_url_never_injects(self, force_encrypt):
+    def test_inplace_save_without_url_never_injects(self, force_encrypt):
         """The corruption guard: .uno:Save targets the session temp plaintext
-        itself — injecting here would overwrite the temp with ciphertext."""
+        itself — the write-back belongs to the session close's re-encrypt."""
         audits: list = []
         interceptor = make_interceptor(force_encrypt, audits=audits)
         interceptor.dispatch(FakeURL(".uno:Save"), ())
-        assert interceptor._slave._dispatch.dispatched[0][1] == ()  # clean delegate
+        assert interceptor._slave._dispatch.dispatched[0][1] == ()  # clean
+        assert interceptor._frame._model.stored == []
         assert audits == []
 
-    def test_saveall_without_url_never_injects(self, force_encrypt):
+    def test_inplace_saveall_without_url_never_injects(self, force_encrypt):
         interceptor = make_interceptor(force_encrypt)
         interceptor.dispatch(FakeURL(".uno:SaveAll"), ())
         assert interceptor._slave._dispatch.dispatched[0][1] == ()
 
-    def test_saveacopy_without_url_forces_encrypt(self, force_encrypt):
-        interceptor = make_interceptor(force_encrypt)
+
+class TestDialogFlows:
+    """Dialog flows (no URL argument) can NOT inject at dispatch time: the
+    native dialog discards the payload and the file landed PLAINTEXT (the
+    user-visible 1-3 s watcher window).  The flow now runs its own picker on
+    the deferred thread and snapshots the picked target encrypted."""
+
+    def test_saveas_dialog_snapshots_picked_as_cbx(self, force_encrypt,
+                                                   tmp_path: Path):
+        audits: list = []
+        interceptor = make_interceptor(
+            force_encrypt, audits=audits,
+            pick=lambda: url_of(tmp_path, "out", "report.docx"))
+        interceptor.dispatch(FakeURL(".uno:SaveAs"), ())
+        final = tmp_path / "out" / "report.docx.cbx"
+        assert final.read_bytes() == b"CIPHERTEXT-BYTES"
+        assert any(a[0] == "encrypt" and a[3] is True for a in audits)
+        # no slave delegation at all (snapshot path)
+        assert interceptor._slave._dispatch.dispatched == []
+
+    def test_dialog_save_keeps_inplace_clean(self, force_encrypt, tmp_path: Path):
+        """The snapshot never switches the medium: subsequent in-place saves
+        keep writing the session temp plaintext, clean."""
+        interceptor = make_interceptor(
+            force_encrypt, pick=lambda: url_of(tmp_path, "out", "report.docx"))
+        interceptor.dispatch(FakeURL(".uno:SaveAs"), ())
+        interceptor.dispatch(FakeURL(".uno:Save"), ())
+        slot, arguments = interceptor._slave._dispatch.dispatched[0]
+        assert slot == ".uno:Save"
+        assert arguments == ()
+
+    def test_saveacopy_dialog_snapshots_too(self, force_encrypt, tmp_path: Path):
+        interceptor = make_interceptor(
+            force_encrypt, pick=lambda: url_of(tmp_path, "out", "copy.docx"))
         interceptor.dispatch(FakeURL(".uno:SaveACopy"), ())
-        injected = arg_names(interceptor._slave._dispatch.dispatched[0][1])
-        assert "EncryptionData" in injected
+        assert (tmp_path / "out" / "copy.docx.cbx").read_bytes() == b"CIPHERTEXT-BYTES"
+
+    def test_dialog_cancel_saves_nothing(self, force_encrypt):
+        audits: list = []
+        interceptor = make_interceptor(force_encrypt, audits=audits,
+                                       pick=lambda: None)
+        interceptor.dispatch(FakeURL(".uno:SaveAs"), ())
+        assert interceptor._slave._dispatch.dispatched == []
+        assert interceptor._frame._model.stored == []
+        assert audits == []  # parity with a native-dialog cancel
+
+    def test_dialog_picker_failure_fails_closed(self, force_encrypt):
+        audits: list = []
+
+        def boom():
+            raise RuntimeError("picker unavailable")
+
+        interceptor = make_interceptor(force_encrypt, audits=audits, pick=boom)
+        interceptor.dispatch(FakeURL(".uno:SaveAs"), ())
+        assert interceptor._slave._dispatch.dispatched == []
+        assert interceptor._frame._model.stored == []
+        assert audits == [("encrypt", "", None, False)]
+
+    def test_dialog_plain_target_delegates_clean(self, force_encrypt,
+                                                 tmp_path: Path):
+        audits: list = []
+        interceptor = make_interceptor(
+            force_encrypt, audits=audits,
+            pick=lambda: url_of(tmp_path, "out", "notes.odt"))
+        interceptor.dispatch(FakeURL(".uno:SaveAs"), ())
+        _, arguments = interceptor._slave._dispatch.dispatched[0]
+        # only the URL rides along (no payload, no filter): plaintext family
+        assert arg_names(arguments) == ["URL"]
+        url_arg = next(a for a in arguments if getattr(a, "Name", "") == "URL")
+        assert url_arg.Value == url_of(tmp_path, "out", "notes.odt")
+        assert audits == [("export_plaintext", "", None, True)]
 
 
 class TestKeyFailClosed:
-    def test_missing_key_refuses_ooxml_save(self, force_encrypt):
+    def test_missing_key_refuses_ooxml_save(self, force_encrypt, tmp_path: Path):
         audits: list = []
         interceptor = make_interceptor(force_encrypt, password=None, audits=audits)
         interceptor.dispatch(FakeURL(".uno:SaveAs"), (
-            FakeArg("URL", "file:///s:/out/report.docx"),))
+            FakeArg("URL", url_of(tmp_path, "out", "report.docx")),))
         assert audits == [("encrypt", "", None, False)]
         assert interceptor._slave._dispatch.dispatched == []
+        assert interceptor._frame._model.stored == []
 
-    def test_missing_key_still_passes_non_ooxml(self, force_encrypt):
+    def test_missing_key_still_passes_non_ooxml(self, force_encrypt,
+                                                tmp_path: Path):
         audits: list = []
         interceptor = make_interceptor(force_encrypt, password=None, audits=audits)
         interceptor.dispatch(FakeURL(".uno:SaveAs"), (
-            FakeArg("URL", "file:///s:/out/notes.pdf"),))
+            FakeArg("URL", url_of(tmp_path, "out", "notes.pdf")),))
         assert audits == [("export_plaintext", "", None, True)]
         assert len(interceptor._slave._dispatch.dispatched) == 1
 
-    def test_provider_callable_is_consulted_each_dispatch(self, force_encrypt):
+    def test_provider_callable_is_consulted_each_snapshot(self, force_encrypt,
+                                                          tmp_path: Path):
         keys = iter(["k-a", None])
         audits: list = []
-        interceptor = force_encrypt.ForceEncryptInterceptor(object())
+        interceptor = force_encrypt.ForceEncryptInterceptor(
+            object(), spawn=_sync_spawn,
+            pick_save_target=lambda: None)
         interceptor.attach(FakeFrame())
         interceptor.setSlaveDispatchProvider(FakeSlave(FakeDispatch()))
         interceptor.set_password_provider(lambda: next(keys))
         interceptor.set_audit_reporter(lambda a, h, kv, ok: audits.append((a, h, kv, ok)))
         interceptor.dispatch(FakeURL(".uno:SaveAs"), (
-            FakeArg("URL", "file:///s:/one.docx"),))
+            FakeArg("URL", url_of(tmp_path, "out", "one.docx")),))
         interceptor.dispatch(FakeURL(".uno:SaveAs"), (
-            FakeArg("URL", "file:///s:/two.docx"),))
-        assert len(interceptor._slave._dispatch.dispatched) == 1
-        assert "Password" in arg_names(interceptor._slave._dispatch.dispatched[0][1])
+            FakeArg("URL", url_of(tmp_path, "out", "two.docx")),))
+        assert len(interceptor._frame._model.stored) == 1  # first save wrote
+        ok_events = [a for a in audits if a[0] == "encrypt" and a[3] is True]
         refused = [a for a in audits if a[0] == "encrypt" and a[3] is False]
-        assert len(refused) == 1  # second save: no key -> fail-closed
+        assert len(ok_events) == 1 and len(refused) == 1  # second: no key
 
 
 class TestDispatchClaiming:
@@ -316,16 +457,3 @@ class TestExportFamily:
             FakeArg("URL", "file:///s:/out/share.pdf"),))
         assert audits == [("export_plaintext", "", None, True)]
         assert len(interceptor._slave._dispatch.dispatched) == 1
-
-
-class TestWiring:
-    def test_register_on_frame_attaches_and_registers(self, force_encrypt):
-        interceptor = force_encrypt.register_on_frame(
-            FakeFrame(), "k", audit_reporter=None)
-        assert interceptor._registered is True
-        assert interceptor._frame is not None
-
-    def test_release_unregisters(self, force_encrypt):
-        interceptor = force_encrypt.register_on_frame(FakeFrame(), "k")
-        interceptor.release()
-        assert interceptor._registered is False

@@ -637,3 +637,58 @@ class TestDefaultKill:
 
         assert killed == 1
         assert procs[0].killed and not procs[1].killed and not procs[2].killed
+
+
+# ---------------------------------------------------------------------------
+# quarantine retention purge (phase 4)
+# ---------------------------------------------------------------------------
+
+class TestQuarantineRetention:
+    @staticmethod
+    def _entry(cfg: RecoveryConfig, name: str, *, age_days: float) -> str:
+        full = os.path.join(cfg.quarantine_dir, name)
+        os.makedirs(os.path.join(full, "luX.tmp"), exist_ok=True)
+        old = time.time() - age_days * 86400.0
+        os.utime(full, (old, old))
+        return full
+
+    def test_past_retention_purged_recent_kept(self, cfg, recorder):
+        old_dir = self._entry(cfg, "aaaa-old-dir", age_days=40)
+        fresh_dir = self._entry(cfg, "zzzz-fresh-dir", age_days=1)
+        wire(cfg, recorder)
+
+        report = run_recovery(cfg)
+
+        assert report.quarantine_purged == 1
+        assert not os.path.exists(old_dir)
+        assert os.path.exists(fresh_dir)
+        action, _fh, _kv, ok, _err = recorder.first("quarantine_purged")
+        assert (action, ok) == ("quarantine_purged", True)
+
+    def test_retention_disabled_keeps_everything(self, cfg, recorder):
+        entry = self._entry(cfg, "aaaa-old-dir", age_days=400)
+        wire(cfg, recorder, quarantine_retention_days=0)
+
+        report = run_recovery(cfg)
+
+        assert report.quarantine_purged == 0
+        assert os.path.exists(entry)
+
+    def test_locked_entry_survives_to_next_startup(self, cfg, recorder, monkeypatch):
+        import shutil
+
+        entry = self._entry(cfg, "aaaa-old-dir", age_days=40)
+        real_rmtree = shutil.rmtree
+
+        def refuse_locked(path, *args, **kwargs):
+            if os.path.normcase(str(path)) == os.path.normcase(entry):
+                raise OSError("file in use")
+            return real_rmtree(path, *args, **kwargs)
+
+        monkeypatch.setattr(shutil, "rmtree", refuse_locked)
+        wire(cfg, recorder)
+
+        report = run_recovery(cfg)
+
+        assert report.quarantine_purged == 0
+        assert os.path.exists(entry)  # fail-closed: retried at the next startup

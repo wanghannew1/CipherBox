@@ -65,6 +65,9 @@ def launch_soffice(tmp_path: str, profile: str, pipe_name: str, env: dict) -> in
     """
     exe = find_soffice()
     profile_uri = Path(profile).as_uri()
+    from agent import hide_directory  # noqa: PLC0415 — lazy: keeps this module import-light
+
+    hide_directory(str(Path(profile).parent))  # cipherbox work areas stay out of Explorer
     try:
         process = subprocess.Popen(
             [

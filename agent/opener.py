@@ -32,6 +32,7 @@ if os.name != "nt":  # pragma: no cover - Windows-only agent
 import ctypes
 from ctypes import wintypes
 
+from agent import hide_directory
 from agent.container import CbxContainer, WrongKeyError, ContainerError
 
 SESSION_DIR = os.path.expandvars(r"%APPDATA%\CipherBox\sessions")
@@ -467,6 +468,7 @@ class ControlledOpener:
         session_id = str(uuid.uuid4())
         session_dir = os.path.join(self.tmp_root, session_id)
         os.makedirs(session_dir, exist_ok=True)
+        hide_directory(self.tmp_root)  # the volume work area stays out of Explorer
 
         # --- decrypt .cbx (container.py, no UNO) ------------------------
         try:
@@ -511,6 +513,14 @@ class ControlledOpener:
         if launch is None:
             raise RuntimeError("launch_soffice callback not provided")
 
+        # The CipherBoxDataSpace engine must be registered in the office
+        # profile BEFORE boot -- without it every encrypted save fails with
+        # impl_store Io Write/16 (live 2026-11-18) and the interceptor
+        # fail-closes.  start_soffice.ps1 deploys it for the service
+        # profile; the controlled profile gets the same treatment here.
+        from agent.engine_deploy import ensure_cipherbox_engine
+        ensure_cipherbox_engine(profile, log=self.log)
+
         pid = launch(tmp_path, profile, pipe_name, env)
 
         job: JobObject | None = None
@@ -537,8 +547,7 @@ class ControlledOpener:
                 if job is not None:
                     job.close()  # KILL_ON_JOB_CLOSE kills the soffice we started
                     job = None
-                self._delete_quiet(tmp_path)
-                self._rmdir_quiet(session_dir)
+                self._cleanup_session_dir(session_dir)
                 self.session_store.delete(session_id)
                 raise RuntimeError(
                     f"interceptor link failed; session aborted: {exc}") from exc
@@ -587,8 +596,7 @@ class ControlledOpener:
                         self.key_version, False, str(exc))
 
         # --- cleanup: delete temp cleartext + session record ------------
-        self._delete_quiet(tmp_path)
-        self._rmdir_quiet(session_dir)
+        self._cleanup_session_dir(session_dir)
         self.session_store.delete(session_id)
 
         return OpenResult(
@@ -621,19 +629,32 @@ class ControlledOpener:
                 time.sleep(delay_s)
         return None
 
-    @staticmethod
-    def _delete_quiet(path: str) -> None:
-        try:
-            os.remove(path)
-        except OSError:
-            pass
+    def _cleanup_session_dir(self, session_dir: str, *, attempts: int = 20,
+                             delay_s: float = 0.25) -> None:
+        """Delete the whole per-session scratch dir (best-effort, retried).
 
-    @staticmethod
-    def _rmdir_quiet(path: str) -> None:
-        try:
-            os.rmdir(path)
-        except OSError:
-            pass
+        The controlled GUI holds TMP/TEMP inside this dir, so LO leaves
+        ``lu*.tmp`` work files/dirs behind; they release their locks a beat
+        after the process dies, which is why a plain ``os.rmdir`` used to
+        fail silently and leave a shell directory behind — which recovery
+        then quarantined as an orphan on the next startup.  Wipe everything
+        (recursive) with bounded retries for that lock-release race; a
+        still-locked leftover is reported, never raised (the session record
+        is already gone, so recovery treats any remnant as an orphan).
+        """
+        import shutil
+
+        for attempt in range(attempts):
+            try:
+                if not os.path.exists(session_dir):
+                    return
+                shutil.rmtree(session_dir)
+                return
+            except OSError:
+                if attempt == attempts - 1:
+                    self.log(f"[agent] session scratch dir not fully removed: {session_dir}")
+                    return
+                time.sleep(delay_s)
 
 
 # ---------------------------------------------------------------------------
