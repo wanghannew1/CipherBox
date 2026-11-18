@@ -114,6 +114,8 @@ class FakeDesktop:
     def __init__(self, fake: "FakeUno") -> None:
         self._fake = fake
         self.load_calls: list[tuple[str, str, int, tuple]] = []
+        self.terminate_calls = 0
+        self.terminate_raises = False
 
     def getFrames(self) -> FakeFrames:
         return FakeFrames(self._fake)
@@ -123,6 +125,11 @@ class FakeDesktop:
         if self._fake.load_returns_none:
             return None
         return self._fake.doc
+
+    def terminate(self) -> None:
+        self.terminate_calls += 1
+        if self.terminate_raises:
+            raise RuntimeError("bridge disposed")
 
 
 class FakeDoc:
@@ -222,15 +229,21 @@ def wired():
 # driver: run() in a thread, event polling, lifecycle triggers
 # ---------------------------------------------------------------------------
 
-def run_worker(spec, *, uno, fe, requests=None, connect_timeout=0.5):
-    """Start LinkWorker.run in a daemon thread; return (emitted, worker, thread)."""
+def run_worker(spec, *, uno, fe, requests=None, connect_timeout=0.5, frames_wait=0.0):
+    """Start LinkWorker.run in a daemon thread; return (emitted, worker, thread).
+
+    ``frames_wait`` defaults to 0.0 (instant-fail on a zero-frame sweep) so
+    existing tests keep their semantics; the delayed-frames test passes a
+    real window.
+    """
     emitted: list[dict] = []
     requester = requests if requests is not None else (
         lambda pipe, request, timeout_s=5.0: {"ok": True, "key": "k3", "version": 3})
     worker = LinkWorker(
         spec, uno_module=uno, force_encrypt_module=fe,
         requester=requester, sleep=lambda _s: time.sleep(0.01),
-        connect_timeout_s=connect_timeout, emit=lambda p: emitted.append(p))
+        connect_timeout_s=connect_timeout, frames_wait_timeout_s=frames_wait,
+        emit=lambda p: emitted.append(p))
     thread = threading.Thread(target=worker.run, daemon=True)
     thread.start()
     return emitted, worker, thread
@@ -328,10 +341,28 @@ class TestHardOrdering:
 
     def test_no_frames_is_a_hard_failure(self, wired):
         uno, fe = wired
-        emitted, _, thread = run_worker(make_spec(), uno=uno, fe=fe)
+        emitted, _, thread = run_worker(make_spec(), uno=uno, fe=fe,
+                                        frames_wait=0.0)
         assert "no frames" in wait_event(emitted, "error")["error"]
         thread.join(timeout=5)
         assert uno.desktop.load_calls == []
+
+    def test_zero_frames_race_is_waited_not_fatal(self, wired):
+        """GUI soffice can legitimately have ZERO frames right after launch
+        (Start Center not up yet).  Within the wait window a later-appearing
+        frame must be intercepted and the document loaded — the old
+        instant-fail killed the worker over interceptors already wired into
+        LO, and the GUI process aborted on the dead bridge (2026-11-17
+        live: 3x soffice.bin crash during exactly this window)."""
+        uno, fe = wired
+        emitted, _, thread = run_worker(make_spec(), uno=uno, fe=fe,
+                                        frames_wait=5.0)
+        time.sleep(0.05)               # first sweeps come up empty
+        uno.frames.append(object())    # ...then the Start Center appears
+        wait_event(emitted, "loaded")
+        assert uno.desktop.load_calls  # document loaded, fail-open avoided
+        close_doc(uno)
+        thread.join(timeout=5)
 
     def test_connect_failure_emits_ok_false(self, wired):
         uno, fe = wired
@@ -475,6 +506,58 @@ class TestCloseDetection:
         thread.join(timeout=5)
         assert emitted[-1].get("event") == "closed"
         assert emitted[-1].get("crashed") is False
+
+
+class TestOfficeTerminate:
+    """Session-end desktop.terminate(): a surviving Start Center office
+    swallows the NEXT session's launch (same-profile forwarding) and that
+    office's second UNO bridge cannot register interceptors (live 2026-11-18:
+    "Binary URP bridge already disposed" on every post-first bridge)."""
+
+    def test_terminate_on_clean_close(self, wired):
+        uno, fe = wired
+        uno.frames = [object()]
+        emitted, _, thread = run_worker(make_spec(), uno=uno, fe=fe)
+        wait_event(emitted, "loaded")
+        close_doc(uno)
+        thread.join(timeout=5)
+        assert uno.desktop.terminate_calls == 1
+        assert emitted[-1] == {"event": "closed", "crashed": False}
+
+    def test_terminate_also_on_crashed_close(self, wired):
+        uno, fe = wired
+        uno.frames = [object()]
+        emitted, _, thread = run_worker(make_spec(), uno=uno, fe=fe)
+        wait_event(emitted, "loaded")
+        close_doc(uno, crashed=True)
+        thread.join(timeout=5)
+        assert uno.desktop.terminate_calls == 1
+        assert emitted[-1] == {"event": "closed", "crashed": True}
+
+    def test_terminate_failure_is_suppressed(self, wired):
+        """A dead bridge (office already gone / wedged) must not break the
+        closed event — the opener's job kill is the backstop."""
+        uno, fe = wired
+        uno.frames = [object()]
+        uno.desktop.terminate_raises = True
+        emitted, _, thread = run_worker(make_spec(), uno=uno, fe=fe)
+        wait_event(emitted, "loaded")
+        close_doc(uno)
+        thread.join(timeout=5)
+        assert uno.desktop.terminate_calls == 1
+        assert emitted[-1] == {"event": "closed", "crashed": False}
+
+    def test_no_terminate_when_load_failed(self, wired):
+        """Pre-load failure aborts the session (the opener's failure path
+        job-kills the office); the worker emits ok:false and exits WITHOUT
+        touching the desktop again."""
+        uno, fe = wired
+        uno.frames = [object()]
+        uno.load_returns_none = True
+        emitted, _, thread = run_worker(make_spec(), uno=uno, fe=fe)
+        thread.join(timeout=5)
+        assert any(e.get("ok") is False for e in emitted)
+        assert uno.desktop.terminate_calls == 0
 
 
 # ---------------------------------------------------------------------------

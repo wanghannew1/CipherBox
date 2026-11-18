@@ -42,6 +42,13 @@ DESKTOP_SERVICE = "com.sun.star.frame.Desktop"
 RESOLVER_SERVICE = "com.sun.star.bridge.UnoUrlResolver"
 NO_UPDATE = 0  # com.sun.star.document.UpdateDocMode.NO_UPDATE
 CONNECT_TIMEOUT_S = 60.0
+# GUI soffice shows the Start Center first; immediately after launch the
+# frame set can legitimately be EMPTY.  An instant hard failure here would
+# kill this worker while interceptors are already wired into LO's dispatch
+# chains — the GUI process then aborts on the next dispatch to the dead
+# bridge (live 2026-11-17: 3x soffice.bin 0xc0000409/KERNELBASE aborts).
+# Poll for a bounded window instead; <= 0 keeps the old instant-fail.
+FRAMES_WAIT_TIMEOUT_S = 10.0
 KEY_REQUEST_TIMEOUT_S = 5.0
 AUDIT_REQUEST_TIMEOUT_S = 5.0
 QUEUE_FILE_NAME = "link-audit.jsonl"
@@ -71,13 +78,16 @@ class LinkWorker:
 
     def __init__(self, spec: dict, *, uno_module=None, force_encrypt_module=None,
                  requester=None, sleep=time.sleep,
-                 connect_timeout_s: float = CONNECT_TIMEOUT_S, emit=None) -> None:
+                 connect_timeout_s: float = CONNECT_TIMEOUT_S,
+                 frames_wait_timeout_s: float = FRAMES_WAIT_TIMEOUT_S,
+                 emit=None) -> None:
         self.spec = spec
         self._uno_module = uno_module
         self._fe = force_encrypt_module
         self._requester = requester or connect_and_request
         self._sleep = sleep
         self.connect_timeout_s = connect_timeout_s
+        self.frames_wait_timeout_s = frames_wait_timeout_s
         self._emit = emit or _emit
         self._stop = threading.Event()
         self._crashed = threading.Event()
@@ -121,6 +131,7 @@ class LinkWorker:
         self._watcher.start()
         crashed = self._await_close(uno, doc)
         self._stop.set()
+        self._terminate_office()
         if self._watcher is not None:
             self._watcher.join(timeout=5.0)
         closed = {"event": "closed", "crashed": crashed}
@@ -150,11 +161,24 @@ class LinkWorker:
         raise RuntimeError(f"controlled soffice pipe unreachable: {last}")
 
     def _register_all(self, uno, fe) -> int:
-        """Register the interceptor on every existing frame."""
-        interceptor = self._register_new_frames(uno, fe)
-        if interceptor == 0:
-            raise RuntimeError("no frames to intercept (soffice start center missing?)")
-        return interceptor
+        """Register the interceptor on every existing frame.
+
+        A zero-frame sweep right after launch is a normal GUI race (the
+        Start Center frame may not exist yet), not a hard failure — see
+        FRAMES_WAIT_TIMEOUT_S.  ``frames_wait_timeout_s <= 0`` restores the
+        old instant-fail semantics (used by unit tests).
+        """
+        deadline = time.monotonic() + self.frames_wait_timeout_s
+        while True:
+            newly = self._register_new_frames(uno, fe)
+            if newly > 0:
+                return newly
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    "no frames to intercept (soffice start center missing?)")
+            if self._stop.is_set():
+                raise RuntimeError("link worker stopped before any frame appeared")
+            self._sleep(0.5)
 
     def _register_new_frames(self, uno, fe) -> int:
         """One sweep: register on frames not yet intercepted; return count."""
@@ -243,6 +267,30 @@ class LinkWorker:
         return doc
 
     # -- close detection ----------------------------------------------------------
+
+    def _terminate_office(self) -> None:
+        """Best-effort ``desktop.terminate()`` at session end.
+
+        After the document closes the controlled GUI would otherwise keep
+        living with its Start Center frame.  A surviving office poisons the
+        NEXT session twice over: (a) the next ``soffice.exe`` launch with the
+        same ``UserInstallation`` profile forwards its ``--accept`` to the
+        survivor instead of starting a fresh instance; (b) on that survivor
+        the fresh worker bridge is never the process's FIRST bridge, and LO
+        serves client-object callbacks (interceptor registration) on the
+        first bridge only — plain client->server calls keep working, but
+        ``registerDispatchProviderInterceptor`` raises ``RuntimeException:
+        Binary URP bridge already disposed`` (live 2026-11-18: fresh office,
+        1st bridge registers on 2 frames, 2nd bridge fails this way every
+        time).  The opener's job kill is the backstop; terminate() here makes
+        the normal path exit cleanly and releases the profile lock.
+        """
+        if self._desktop is None:
+            return
+        try:
+            self._desktop.terminate()
+        except Exception:  # noqa: BLE001 — bridge already dead: job kill follows
+            pass
 
     def _await_close(self, uno, doc) -> bool:
         """Block until the document closes; True = abnormal (crash/bridge).

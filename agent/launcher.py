@@ -16,6 +16,7 @@ import sys
 import time
 from pathlib import Path
 
+from agent import make_console_prints_safe
 from agent.ipc import PIPE_NAME, PipeError, connect_and_request
 
 SESSION_TIMEOUT_S = 3600.0  # the response arrives when the controlled session ends (minutes)
@@ -29,6 +30,7 @@ _EXIT_UNREACHABLE = 3
 
 
 def main(argv: list[str] | None = None, *, spawn_wait_s: float | None = None) -> int:
+    make_console_prints_safe()
     parser = argparse.ArgumentParser(prog="cipherbox-launcher",
                                      description="forward a .cbx open request to the resident agent")
     parser.add_argument("cbx_path", help="absolute path of the .cbx file to open")

@@ -37,6 +37,7 @@ import threading
 from dataclasses import dataclass
 from typing import Callable
 
+from agent import make_console_prints_safe
 from agent.audit import AuditReporter
 from agent.cleanup import RecoveryConfig, RecoveryReport, run_recovery
 from agent.config import AgentConfig, ConfigError, LoadedConfig, load_config
@@ -176,7 +177,15 @@ def make_interceptor_attacher(config: AgentConfig) -> Callable[[str, str], LinkH
             doc_path=doc_path,
             agent_pipe=LINK_PIPE_NAME,
             queue_dir=spec_queue_dir))
-        frames = handle.await_loaded()
+        try:
+            frames = handle.await_loaded()
+        except Exception as exc:
+            # The worker's error otherwise lands only in the launcher's
+            # double-click cmd window, which closes before anyone can read
+            # it.  Surface it on the persistent agent console; the opener
+            # then aborts the session fail-closed as before.
+            print(f"[agent] link FAILED: {exc}")
+            raise
         print(f"[agent] link: interception active on {frames} frame(s), document loaded")
         return handle
 
@@ -256,7 +265,15 @@ def build_runtime(loaded: LoadedConfig, *, with_watcher: bool, pipe_name: str = 
             # Encryptor pipeline re-writes it through its own .cbx.tmp rename.
             cbx = os.path.abspath(plain_path) + CBX_SUFFIX
             print(f"[agent] encrypting: {plain_path}")
-            uno_driver.encrypt_to_cbx(plain_path, cbx, password)
+            try:
+                uno_driver.encrypt_to_cbx(plain_path, cbx, password)
+            except Exception as exc:
+                # Surface the failure on the console: the retry loop inside
+                # Encryptor only lands the final error in the audit event,
+                # and the server drops the detail text — without this print
+                # the operator sees N silent "encrypting" lines and nothing else.
+                print(f"[agent] encrypt FAILED: {exc}")
+                raise
             with open(cbx, "rb") as fh:
                 data = fh.read()
             print(f"[agent] encrypted: {cbx} ({len(data)} bytes)")
@@ -404,6 +421,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    make_console_prints_safe()
     args = parse_args(argv)
     try:
         loaded = load_config(args.config, args.token_file)

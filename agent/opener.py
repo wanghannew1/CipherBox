@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -99,7 +100,14 @@ class JobObject:
 
     def assign_process(self, pid: int) -> None:
         kernel32 = self._kernel32
-        h = kernel32.OpenProcess(0x0001 | 0x0002, False, pid)  # PROCESS_SET_QUOTA|PROCESS_TERMINATE
+        # PROCESS_SET_QUOTA (0x0100) | PROCESS_TERMINATE (0x0001).  SET_QUOTA
+        # is required in practice: on Win11 2262x a TERMINATE-only (or
+        # TERMINATE|CREATE_THREAD) handle passes OpenProcess but the assign
+        # itself fails with ERROR_ACCESS_DENIED (live 2026-11-18 — this exact
+        # silent failure left the controlled office alive past session end,
+        # which then swallowed the next session's launch via same-profile
+        # forwarding and broke interceptor registration on its 2nd bridge).
+        h = kernel32.OpenProcess(0x0100 | 0x0001, False, pid)
         if not h:
             raise ctypes.WinError(ctypes.get_last_error())
         try:
@@ -119,6 +127,103 @@ class JobObject:
 
     def __exit__(self, *exc) -> None:
         self.close()
+
+
+_TH32CS_SNAPPROCESS = 0x00000002
+_INVALID_HANDLE_VALUE = -1
+_OFFICE_IMAGES = frozenset({"soffice.exe", "soffice.bin"})
+
+
+class _ProcessEntry32W(ctypes.Structure):
+    _fields_ = [
+        ("dwSize", wintypes.DWORD),
+        ("cntUsage", wintypes.DWORD),
+        ("th32ProcessID", wintypes.DWORD),
+        ("th32DefaultHeap", ctypes.c_size_t),
+        ("th32ModuleID", wintypes.DWORD),
+        ("cntThreads", wintypes.DWORD),
+        ("th32ParentProcessID", wintypes.DWORD),
+        ("pcPriClassBase", ctypes.c_long),
+        ("dwFlags", wintypes.DWORD),
+        ("szExeFile", wintypes.WCHAR * 260),
+    ]
+
+
+def office_children_of(stub_pid: int) -> list[int]:
+    """Live soffice.exe/soffice.bin pids whose parent is ``stub_pid``.
+
+    Thin Toolhelp32 snapshot (same shape as JobObject above: Windows API,
+    covered by the live smoke, no unit-test seam).  If the stub pid is not
+    in the snapshot at all (already exited / pid recycled) nothing is
+    returned — assigning children of a recycled pid could bind an innocent
+    process into the kill-on-close job.
+    """
+    kernel32 = ctypes.WinDLL("kernel32.dll", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.restype = ctypes.c_void_p
+    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel32.Process32FirstW.argtypes = [ctypes.c_void_p, ctypes.POINTER(_ProcessEntry32W)]
+    kernel32.Process32NextW.argtypes = [ctypes.c_void_p, ctypes.POINTER(_ProcessEntry32W)]
+    snapshot = kernel32.CreateToolhelp32Snapshot(_TH32CS_SNAPPROCESS, 0)
+    if not snapshot or snapshot == ctypes.c_void_p(_INVALID_HANDLE_VALUE).value:
+        return []
+    try:
+        stub_alive = False
+        children: list[int] = []
+        entry = _ProcessEntry32W()
+        entry.dwSize = ctypes.sizeof(entry)
+        ok = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+        while ok:
+            image = entry.szExeFile.lower()
+            if entry.th32ProcessID == stub_pid:
+                stub_alive = True
+            elif (entry.th32ParentProcessID == stub_pid
+                    and image in _OFFICE_IMAGES):
+                children.append(entry.th32ProcessID)
+            ok = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+        return children if stub_alive else []
+    finally:
+        kernel32.CloseHandle(ctypes.c_void_p(snapshot))
+
+
+def bind_office_children(job: JobObject, stub_pid: int, *, find: Callable[[int], list[int]] | None = None,
+                         sleep: Callable[[float], None] = time.sleep,
+                         timeout_s: float = 3.0,
+                         log: Callable[[str], None] = print) -> int:
+    """Assign the launcher stub's office children into the kill-on-close job.
+
+    The soffice.exe stub spawns soffice.bin a few milliseconds after its own
+    start; if that birth lands BEFORE ``assign_process(stub_pid)`` the bin
+    never joins the job (processes inherit a job only when born INTO it) and
+    KILL_ON_JOB_CLOSE would kill only the stub.  Live 2026-11-18: exactly
+    that race left a surviving controlled office whose Start Center swallowed
+    the next session's launch (same-profile forwarding) and broke interceptor
+    registration on the survivor's second UNO bridge.  Poll briefly for the
+    office child processes and assign every one found.
+    """
+    find = find or office_children_of
+    bound: set[int] = set()
+    attempted: set[int] = set()  # bound or refused: never retried (no log spam)
+    deadline = time.monotonic() + timeout_s
+    while True:
+        for child in find(stub_pid):
+            if child in attempted:
+                continue
+            attempted.add(child)
+            try:
+                job.assign_process(child)
+                bound.add(child)
+            except Exception as exc:  # boundary: a lost child must not abort the session
+                log(f"[agent] job: cannot bind office process {child}: {exc}")
+        if bound or time.monotonic() >= deadline:
+            break
+        sleep(0.1)
+    if not bound:
+        # No office child ever appeared: either the stub died early (its own
+        # children die with it) or the pid was lost — report, don't fail; the
+        # worker's desktop.terminate() at session end is the remaining guard.
+        log(f"[agent] job: no office child of stub pid {stub_pid} within "
+            f"{timeout_s:.0f}s; session end relies on the office exiting cleanly")
+    return len(bound)
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +432,7 @@ class ControlledOpener:
         wait_document_close: Callable[[int, float], bool] | None = None,
         re_encrypt: Callable[[str, str, str], None] | None = None,
         audit: Callable[[str, str, int | None, bool, str | None], None] | None = None,
+        log: Callable[[str], None] = print,
     ) -> None:
         self.container = container
         self.passwords = passwords
@@ -338,6 +444,7 @@ class ControlledOpener:
         self.wait_document_close = wait_document_close
         self.re_encrypt = re_encrypt
         self.audit = audit
+        self.log = log
 
     # -- public entry point ----------------------------------------------
 
@@ -410,9 +517,12 @@ class ControlledOpener:
         try:
             job = JobObject()
             job.assign_process(pid)
-        except Exception:
+            bind_office_children(job, pid, log=self.log)
+        except Exception as exc:
             # Job Object failure is non-fatal for open; continue without it.
-            job = None
+            # Loud on the console: a dead job backstop means the session-end
+            # office exit depends entirely on desktop.terminate() succeeding.
+            self.log(f"[agent] job: bind failed ({exc}); kill-on-close disabled")
 
         # --- attach the interceptor link (todo 14 hard ordering) --------
         # The link worker registers the forced-encrypt interceptor on every

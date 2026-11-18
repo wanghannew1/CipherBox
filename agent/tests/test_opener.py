@@ -23,6 +23,7 @@ from agent.opener import (
     SingleInstanceMutex,
     _dpapi_decrypt,
     _dpapi_encrypt,
+    bind_office_children,
 )
 
 PASSWORD = "master-password-v1"
@@ -249,3 +250,79 @@ class TestJobObject:
     def test_job_object_create_close(self):
         job = JobObject()
         job.close()
+
+
+# ---------------------------------------------------------------------------
+# bind_office_children (live 2026-11-18: the stub spawns soffice.bin BEFORE
+# assign_process(stub) lands -> bin never inherits the job -> the office
+# survives session end -> the next session's launch forwards into the
+# survivor and its second UNO bridge cannot register interceptors)
+# ---------------------------------------------------------------------------
+
+class FakeJob:
+    def __init__(self, fail_on=None):
+        self.assigned: list[int] = []
+        self.fail_on = fail_on or set()
+
+    def assign_process(self, pid):
+        if pid in self.fail_on:
+            raise OSError(f"assign refused for {pid}")
+        self.assigned.append(pid)
+
+
+class TestBindOfficeChildren:
+    def test_binds_child_appearing_late(self):
+        """The normal race: the bin is not born on the first poll."""
+        job = FakeJob()
+        polls = {"n": 0}
+
+        def find(_pid):
+            polls["n"] += 1
+            return [] if polls["n"] < 3 else [4242]
+
+        bound = bind_office_children(job, 1000, find=find,
+                                     sleep=lambda _s: None, timeout_s=3.0)
+        assert bound == 1
+        assert job.assigned == [4242]
+
+    def test_binds_every_office_child_once(self):
+        job = FakeJob()
+
+        def find(_pid):
+            return [111, 222]
+
+        bound = bind_office_children(job, 1000, find=find,
+                                     sleep=lambda _s: None, timeout_s=3.0)
+        assert bound == 2
+        assert job.assigned == [111, 222]
+
+    def test_assign_failure_is_logged_not_raised(self):
+        job = FakeJob(fail_on={4242})
+        logs: list[str] = []
+        bound = bind_office_children(job, 1000, find=lambda _p: [4242],
+                                     sleep=lambda _s: None, timeout_s=0.2,
+                                     log=logs.append)
+        assert bound == 0
+        assert job.assigned == []
+        assert any("cannot bind" in line for line in logs)
+
+    def test_failed_child_is_attempted_once(self):
+        """A refused pid must not be re-attempted/re-logged every poll."""
+        job = FakeJob(fail_on={4242})
+        logs: list[str] = []
+        bind_office_children(job, 1000, find=lambda _p: [4242],
+                             sleep=lambda _s: None, timeout_s=0.2,
+                             log=logs.append)
+        assert len([line for line in logs if "cannot bind" in line]) == 1
+
+    def test_timeout_logs_warning_when_no_child(self):
+        """No soffice child ever appears (stub died with its children or the
+        launch was forwarded): report, don't fail — terminate-on-close is the
+        remaining guard."""
+        job = FakeJob()
+        logs: list[str] = []
+        bound = bind_office_children(job, 1000, find=lambda _p: [],
+                                     sleep=lambda _s: None, timeout_s=0.3,
+                                     log=logs.append)
+        assert bound == 0
+        assert any("no office child" in line for line in logs)
